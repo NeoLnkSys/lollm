@@ -71,9 +71,9 @@ func (s *Server) complete(ctx context.Context, p completeParams) (*completeResul
 			adapter := s.adapterFor(conn.Provider)
 			start := time.Now()
 
-			resp, err := adapter.Chat(ctx, conn, &providers.ChatRequest{
+			resp, err := s.chatWithRetries(ctx, adapter, conn, &providers.ChatRequest{
 				Body: p.Body, Model: g.Model, Stream: false,
-			})
+			}, p.RequestID, combo.Name, g.Model)
 			if err != nil {
 				pe := toProviderError(err)
 				lastErr = pe

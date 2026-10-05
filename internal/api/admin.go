@@ -3,7 +3,10 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -13,6 +16,8 @@ import (
 	"github.com/lollm/lollm/internal/auth"
 	"github.com/lollm/lollm/internal/backup"
 	"github.com/lollm/lollm/internal/db"
+	"github.com/lollm/lollm/internal/providers"
+	"github.com/lollm/lollm/internal/proxy"
 	"github.com/lollm/lollm/internal/secret"
 )
 
@@ -53,6 +58,11 @@ func (s *Server) AdminHandler() http.Handler {
 	r.Get("/api/usage", s.handleAdminUsage)
 	r.Get("/api/models", s.handleAdminModels)
 	r.Get("/api/proxy-pools", s.handleAdminListProxyPools)
+	r.Post("/api/proxy-pools", s.handleAdminCreateProxyPool)
+	r.Put("/api/proxy-pools/{id}", s.handleAdminUpdateProxyPool)
+	r.Delete("/api/proxy-pools/{id}", s.handleAdminDeleteProxyPool)
+	r.Get("/api/proxy-pools/{id}/test", s.handleAdminTestProxyPool)
+	r.Get("/api/connections/{id}/models", s.handleAdminConnectionModels)
 
 	r.Get("/api/settings", s.handleAdminGetSettings)
 	r.Put("/api/settings", s.handleAdminPutSettings)
@@ -205,6 +215,7 @@ type adminConnection struct {
 	Weight            int        `json:"weight"`
 	IsActive          bool       `json:"is_active"`
 	Status            string     `json:"status"`
+	APIKeyCount       int        `json:"api_key_count"`
 	ConsecutiveErrors int        `json:"consecutive_errors"`
 	BackoffUntil      *time.Time `json:"backoff_until"`
 	LatencyEMAMs      float64    `json:"latency_ema_ms"`
@@ -212,7 +223,7 @@ type adminConnection struct {
 	LastUsedAt        *time.Time `json:"last_used_at"`
 }
 
-func toAdminConnection(c *db.Connection) adminConnection {
+func (s *Server) toAdminConnection(c *db.Connection) adminConnection {
 	st := c.Status
 	if st == "" {
 		st = "active"
@@ -220,7 +231,8 @@ func toAdminConnection(c *db.Connection) adminConnection {
 	return adminConnection{
 		ID: c.ID, Name: c.Name, Provider: c.Provider, BaseURL: c.BaseURL,
 		ProxyPoolID: c.ProxyPoolID, APIKeySet: c.APIKeyEncrypted != "",
-		Priority: c.Priority, Weight: c.Weight, IsActive: c.IsActive, Status: st,
+		APIKeyCount: len(providers.KeysOf(s.masterKey, c)),
+		Priority:    c.Priority, Weight: c.Weight, IsActive: c.IsActive, Status: st,
 		ConsecutiveErrors: c.ConsecutiveErrors, BackoffUntil: c.BackoffUntil,
 		LatencyEMAMs: c.LatencyEMAMs, Models: c.Models(), LastUsedAt: c.LastUsedAt,
 	}
@@ -246,7 +258,7 @@ func (s *Server) handleAdminListConnections(w http.ResponseWriter, r *http.Reque
 	}
 	out := make([]adminConnection, 0, len(conns))
 	for _, c := range conns {
-		out = append(out, toAdminConnection(c))
+		out = append(out, s.toAdminConnection(c))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"connections": out})
 }
@@ -295,8 +307,8 @@ func (s *Server) adminConnectionFromInput(in *connectionInput, existing *db.Conn
 		}
 		c.ModelsJSON = string(b)
 	}
-	if strings.TrimSpace(in.APIKey) != "" {
-		enc, err := secret.EncryptString(s.masterKey, strings.TrimSpace(in.APIKey))
+	if keys := normalizeAPIKeys(in.APIKey); len(keys) > 0 {
+		enc, err := secret.EncryptString(s.masterKey, strings.Join(keys, "\n"))
 		if err != nil {
 			return nil, err
 		}
@@ -306,6 +318,19 @@ func (s *Server) adminConnectionFromInput(in *connectionInput, existing *db.Conn
 		return nil, errBadInput("name and provider are required")
 	}
 	return c, nil
+}
+
+// normalizeAPIKeys splits a raw api_key input into clean key list. One key
+// per line → multi-key connection (rotated per request, fallback on rate
+// limit). Returns nil when the input carries no key at all.
+func normalizeAPIKeys(raw string) []string {
+	var out []string
+	for _, k := range strings.Split(raw, "\n") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 type badInputError string
@@ -329,7 +354,7 @@ func (s *Server) handleAdminCreateConnection(w http.ResponseWriter, r *http.Requ
 		writeAdminError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, toAdminConnection(c))
+	writeJSON(w, http.StatusCreated, s.toAdminConnection(c))
 }
 
 func (s *Server) handleAdminUpdateConnection(w http.ResponseWriter, r *http.Request) {
@@ -353,7 +378,7 @@ func (s *Server) handleAdminUpdateConnection(w http.ResponseWriter, r *http.Requ
 		writeAdminError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toAdminConnection(c))
+	writeJSON(w, http.StatusOK, s.toAdminConnection(c))
 }
 
 func (s *Server) handleAdminDeleteConnection(w http.ResponseWriter, r *http.Request) {
@@ -585,12 +610,28 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
-	byProvider := map[string][]string{}
+	// Group catalogs per PROVIDER (not per connection/API key) and dedupe:
+	// five keys at one provider must not produce five copies of every model.
+	bySet := map[string]map[string]bool{}
 	for _, c := range conns {
 		if !c.IsActive {
 			continue
 		}
-		byProvider[c.Provider] = append(byProvider[c.Provider], c.Models()...)
+		if bySet[c.Provider] == nil {
+			bySet[c.Provider] = map[string]bool{}
+		}
+		for _, m := range c.Models() {
+			bySet[c.Provider][m] = true
+		}
+	}
+	byProvider := map[string][]string{}
+	for p, set := range bySet {
+		ms := make([]string, 0, len(set))
+		for m := range set {
+			ms = append(ms, m)
+		}
+		sort.Strings(ms)
+		byProvider[p] = ms
 	}
 	names := make([]string, 0, len(combos))
 	for _, c := range combos {
@@ -609,6 +650,189 @@ func (s *Server) handleAdminListProxyPools(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"proxy_pools": pools})
+}
+
+// --- proxy pool management ------------------------------------------------------------
+
+type proxyPoolInput struct {
+	Name    string   `json:"name"`
+	Proxies []string `json:"proxies"`
+}
+
+// normalizeProxyList trims, drops empties, and validates each proxy URL
+// (must carry a scheme and host: http://, https://, socks5://…).
+func normalizeProxyList(in []string) ([]string, error) {
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		u := strings.TrimSpace(raw)
+		if u == "" {
+			continue
+		}
+		p, err := url.Parse(u)
+		if err != nil || p.Scheme == "" || p.Host == "" {
+			return nil, fmt.Errorf("proxy URL tidak valid: %q (contoh: http://user:pass@host:8080 atau socks5://host:1080)", raw)
+		}
+		out = append(out, u)
+	}
+	return out, nil
+}
+
+func (s *Server) handleAdminCreateProxyPool(w http.ResponseWriter, r *http.Request) {
+	var in proxyPoolInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		return
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name is required"})
+		return
+	}
+	proxies, err := normalizeProxyList(in.Proxies)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if len(proxies) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "at least one proxy URL is required"})
+		return
+	}
+	p := &db.ProxyPool{Name: name, Proxies: proxies}
+	if err := s.store.CreateProxyPool(r.Context(), p); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{"proxy_pool": p})
+}
+
+func (s *Server) handleAdminUpdateProxyPool(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if _, err := s.store.GetProxyPool(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "proxy pool not found"})
+		return
+	}
+	var in proxyPoolInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
+		return
+	}
+	name := strings.TrimSpace(in.Name)
+	if name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "name is required"})
+		return
+	}
+	proxies, err := normalizeProxyList(in.Proxies)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	if len(proxies) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "at least one proxy URL is required"})
+		return
+	}
+	p := &db.ProxyPool{ID: id, Name: name, Proxies: proxies}
+	if err := s.store.UpdateProxyPool(r.Context(), p); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.proxyMgr.Invalidate(id) // cached client holds the old proxy list
+	writeJSON(w, http.StatusOK, map[string]any{"proxy_pool": p})
+}
+
+func (s *Server) handleAdminDeleteProxyPool(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "id")
+	if err := s.store.DeleteProxyPool(r.Context(), id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+	s.proxyMgr.Invalidate(id)
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+}
+
+// proxyStatus is one live probe result for a single proxy URL.
+type proxyStatus struct {
+	URL       string `json:"url"`
+	OK        bool   `json:"ok"`
+	LatencyMs int64  `json:"latency_ms"`
+	Error     string `json:"error,omitempty"`
+}
+
+// probeProxy runs one HTTP GET (default: a 204 endpoint) through the proxy
+// and reports latency. Each probe gets its own timeout.
+func (s *Server) probeProxy(ctx context.Context, rawURL, target string) proxyStatus {
+	st := proxyStatus{URL: rawURL}
+	client, err := proxy.NewProxiedClient(rawURL)
+	if err != nil {
+		st.Error = err.Error()
+		return st
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
+	if err != nil {
+		st.Error = err.Error()
+		return st
+	}
+	start := time.Now()
+	resp, err := client.Do(req)
+	st.LatencyMs = time.Since(start).Milliseconds()
+	if err != nil {
+		st.Error = err.Error()
+		return st
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 400 {
+		st.Error = fmt.Sprintf("proxy returned status %d", resp.StatusCode)
+		return st
+	}
+	st.OK = true
+	return st
+}
+
+// handleAdminTestProxyPool live-tests a pool's proxies: all of them, or a
+// single one via ?url=. The probe target can be overridden with ?target=.
+func (s *Server) handleAdminTestProxyPool(w http.ResponseWriter, r *http.Request) {
+	pool, err := s.store.GetProxyPool(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "proxy pool not found"})
+		return
+	}
+	target := r.URL.Query().Get("target")
+	if target == "" {
+		target = "http://www.gstatic.com/generate_204"
+	}
+	list := pool.Proxies
+	if one := r.URL.Query().Get("url"); one != "" {
+		list = []string{one}
+	}
+	results := make([]proxyStatus, 0, len(list))
+	for _, u := range list {
+		ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+		results = append(results, s.probeProxy(ctx, u, target))
+		cancel()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// handleAdminConnectionModels live-fetches a connection's model catalog from
+// the provider (GET /v1/models). On failure it falls back to the stored
+// catalog so the combo picker always has something to show.
+func (s *Server) handleAdminConnectionModels(w http.ResponseWriter, r *http.Request) {
+	conn, err := s.store.GetConnection(r.Context(), chi.URLParam(r, "id"))
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "connection not found"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(r.Context(), 15*time.Second)
+	defer cancel()
+	models, err := s.adapterFor(conn.Provider).ListModels(ctx, conn)
+	if err != nil {
+		if cat := conn.Models(); len(cat) > 0 {
+			writeJSON(w, http.StatusOK, map[string]any{"models": cat, "source": "catalog", "error": err.Error()})
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"models": []string{}, "source": "error", "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"models": models, "source": "live"})
 }
 
 var adminSettingWhitelist = map[string]bool{

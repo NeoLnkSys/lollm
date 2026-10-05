@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lollm/lollm/internal/db"
@@ -25,6 +27,7 @@ type OpenAICompat struct {
 	meta      Meta
 	masterKey []byte
 	clients   *proxy.Manager
+	keySeq    sync.Map // connID → *atomic.Uint64: round-robin untuk multi-key
 }
 
 // NewOpenAICompat builds the adapter for a provider. clients may be nil
@@ -153,14 +156,38 @@ func (a *OpenAICompat) applyAuth(httpReq *http.Request, conn *db.Connection) {
 	if a.meta.AuthStyle == AuthNone {
 		return
 	}
-	if conn.APIKeyEncrypted == "" {
-		return
-	}
-	key, err := secret.DecryptString(a.masterKey, conn.APIKeyEncrypted)
-	if err != nil || key == "" {
+	keys := KeysOf(a.masterKey, conn)
+	if len(keys) == 0 {
 		return // provider will answer 401; the normalizer reports it
 	}
+	key := keys[0]
+	if len(keys) > 1 {
+		// Multi-key connection: round-robin per request, so retries after a
+		// rate limit automatically land on the next key.
+		v, _ := a.keySeq.LoadOrStore(conn.ID, &atomic.Uint64{})
+		key = keys[int(v.(*atomic.Uint64).Add(1)-1)%len(keys)]
+	}
 	httpReq.Header.Set("Authorization", "Bearer "+key)
+}
+
+// KeysOf decrypts a connection's API keys. A connection may carry several
+// keys (one per line); on rate limit the gateway retries with the next one
+// before falling back to another connection.
+func KeysOf(masterKey []byte, conn *db.Connection) []string {
+	if conn == nil || conn.APIKeyEncrypted == "" {
+		return nil
+	}
+	joined, err := secret.DecryptString(masterKey, conn.APIKeyEncrypted)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, k := range strings.Split(joined, "\n") {
+		if k = strings.TrimSpace(k); k != "" {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 // --- error normalization ------------------------------------------------------

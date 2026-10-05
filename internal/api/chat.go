@@ -127,9 +127,9 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 			adapter := s.adapterFor(conn.Provider)
 			start := time.Now()
 
-			resp, err := adapter.Chat(ctx, conn, &providers.ChatRequest{
+			resp, err := s.chatWithRetries(ctx, adapter, conn, &providers.ChatRequest{
 				Body: body, Model: g.Model, Stream: true,
-			})
+			}, requestID, combo.Name, g.Model)
 			if err != nil {
 				pe := toProviderError(err)
 				lastErr = pe

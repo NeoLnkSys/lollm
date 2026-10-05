@@ -11,7 +11,7 @@ import (
 
 // Build information, wired via -ldflags at build time (see Makefile).
 var (
-	Version   = "0.1.3"
+	Version   = "0.1.5"
 	Commit    = "none"
 	BuildDate = "unknown"
 )

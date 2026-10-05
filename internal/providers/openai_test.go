@@ -3,6 +3,8 @@ package providers
 import (
 	"context"
 	"io"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -366,5 +368,41 @@ func TestLookupAndAliases(t *testing.T) {
 	}
 	if len(Names()) != len(registry) {
 		t.Fatal("Names must list every provider")
+	}
+}
+
+// Multi-key: KeysOf memecah key per baris, applyAuth berotasi round-robin.
+func TestKeysOfAndAuthRotation(t *testing.T) {
+	master := []byte("0123456789abcdef0123456789abcdef")
+	conn := &db.Connection{ID: "conn_rot", Provider: "custom"}
+	if keys := KeysOf(master, conn); len(keys) != 0 {
+		t.Fatal("empty conn must have no keys")
+	}
+
+	joined, err := secret.EncryptString(master, "key-one\n\n  key-two  \nkey-three")
+	if err != nil {
+		t.Fatal(err)
+	}
+	conn.APIKeyEncrypted = joined
+
+	keys := KeysOf(master, conn)
+	if len(keys) != 3 || keys[0] != "key-one" || keys[1] != "key-two" || keys[2] != "key-three" {
+		t.Fatalf("KeysOf split/trim wrong: %v", keys)
+	}
+
+	a := NewOpenAICompat(Meta{Name: "custom", AuthStyle: AuthBearer}, master, nil)
+	seen := map[string]int{}
+	for i := 0; i < 6; i++ {
+		req, _ := http.NewRequest(http.MethodGet, "http://x/v1/models", nil)
+		a.applyAuth(req, conn)
+		seen[strings.TrimPrefix(req.Header.Get("Authorization"), "Bearer ")]++
+	}
+	if len(seen) != 3 {
+		t.Fatalf("rotation must spread across all 3 keys, saw %d", len(seen))
+	}
+	for k, n := range seen {
+		if n != 2 {
+			t.Fatalf("key %s used %d times, want 2 (even rotation)", k, n)
+		}
 	}
 }
