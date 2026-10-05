@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.3 "Synapse" — 2026-10-05
+
+- **Kompatibilitas klien diperluas** — field spesifik vendor di level atas request (mis. `search_parameters` dari Grok CLI/xAI) kini juga dibersihkan via allowlist sebelum diteruskan, memperbaiki error 400 `Cannot find field` dari upstream Google/FastAPI. Terverifikasi end-to-end dengan Grok CLI (chat + tool calls multi-ronde).
+
 ## v0.1.2 "Synapse" — 2026-10-05
 
 - **Dashboard Material You (MD3)** — sistem warna dinamis dari satu seed hue (pilih swatch atau geser slider di Settings → Tampilan; seluruh tema, termasuk status bar Android, ikut berubah), tombol pill, kartu tonal tanpa border, indikator pill di bottom navigation, bubble chat & bottom sheet membulat khas Google.

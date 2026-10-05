@@ -53,6 +53,7 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sanitizeMessages(body) // strip field non-standar (mis. "model_id" dari Grok CLI)
+	sanitizeBody(body)     // strip field vendor level-atas (mis. "search_parameters")
 
 	stream, _ := body["stream"].(bool)
 

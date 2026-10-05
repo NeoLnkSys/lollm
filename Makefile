@@ -1,7 +1,7 @@
 # LoLLM — single-binary AI gateway / LLM router
 GO      ?= go
 BINARY  := bin/lollm
-VERSION ?= 0.1.2
+VERSION ?= 0.1.3
 COMMIT  ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 DATE    := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 MODULE  := github.com/lollm/lollm
