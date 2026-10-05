@@ -1,5 +1,9 @@
 # Changelog
 
+## v0.1.2 "Synapse" — 2026-10-05
+
+- **Dashboard Material You (MD3)** — sistem warna dinamis dari satu seed hue (pilih swatch atau geser slider di Settings → Tampilan; seluruh tema, termasuk status bar Android, ikut berubah), tombol pill, kartu tonal tanpa border, indikator pill di bottom navigation, bubble chat & bottom sheet membulat khas Google.
+
 ## v0.1.1 "Synapse" — 2026-10-05
 
 Fokus: stabilitas combo routing.
