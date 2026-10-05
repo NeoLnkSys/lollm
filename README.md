@@ -26,9 +26,7 @@ Cara cepat (Linux/macOS):
 curl -fsSL https://github.com/NeoLnkSys/lollm/raw/main/scripts/installer.sh | bash
 ```
 
-Installer mendeteksi OS dan arsitektur, memilih direktori instalasi, memverifikasi checksum, dan membetulkan PATH bila perlu. Opsi lain: `--version vX.Y.Z`, `--dest DIR`, `--uninstall`.
-
-> Repo masih privat — unduh `installer.sh` dari halaman Releases, atau set `LOLM_TOKEN=<PAT>` bila ingin dipakai via pipe.
+Installer mendeteksi OS dan arsitektur, memilih direktori instalasi (root → `/usr/local/bin`, user → `~/.local/bin`), memverifikasi checksum, dan membetulkan PATH bila perlu. Opsi lain: `--version vX.Y.Z`, `--dest DIR`, `--uninstall`.
 
 Manual: unduh tarball dari [Releases](https://github.com/NeoLnkSys/lollm/releases) untuk platform Anda (linux/amd64, darwin/amd64, darwin/arm64, windows/amd64), ekstrak, dan letakkan `lollm` di PATH.
 
