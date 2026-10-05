@@ -201,9 +201,12 @@ func normalizeError(status int, body []byte, header http.Header) *ProviderError 
 		pe.Kind = KindAuth
 	case status == http.StatusNotFound:
 		pe.Kind = KindNotFound // usually "model not found"
-	case status == http.StatusBadRequest, status == http.StatusRequestEntityTooLarge,
-		status == http.StatusUnprocessableEntity:
+	case status == http.StatusBadRequest, status == http.StatusRequestEntityTooLarge:
 		pe.Kind = KindBadRequest
+	case status == http.StatusUnprocessableEntity:
+		// 422 (mis. pydantic "extra_forbidden"): payload ditolak provider ini —
+		// provider lain mungkin menerimanya, jadi masih layak fallback.
+		pe.Kind = KindUnprocessable
 	case status >= 500:
 		pe.Kind = KindServer
 	default:

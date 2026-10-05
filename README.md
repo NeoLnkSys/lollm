@@ -10,8 +10,6 @@ Synapse berdiri di antara coding tool Anda dan semua provider itu. Tool cukup me
 
 **Tidak gampang mati.** Setiap request melewati rantai fallback: provider pertama kena 429 atau 503? Dalam hitungan milidetik Synapse pindah ke koneksi berikutnya. Koneksi bermasalah otomatis masuk backoff, di-probe berkala, dan kembali bertugas begitu pulih. Anda tidak perlu menyentuh apa pun.
 
-**Agent Mode.** Beberapa model bekerja sama untuk satu jawaban: planner menyusun draft, reviewer mengkritik, finalizer merapikan. Atau adu beberapa model dan biarkan judge memilih yang terbaik. Cukup ganti nama model ke `agent-auto` — tanpa konfigurasi tambahan. Klien tetap menerima satu jawaban final; proses internal tidak bocor, dan setiap langkah tercatat rapi di usage log.
-
 **Hemat token di pekerjaan coding.** Percakapan coding penuh output tool yang panjang dan berulang. Synapse meringkas bagian lama sebelum diteruskan ke provider — pemangkasan ini terlihat langsung di kolom "token dihemat" pada dashboard.
 
 **Dashboard di HP.** UI-nya mobile-first: pantau status koneksi secara real-time, uji koneksi ke provider, kelola combo dan API key, lalu coba model mana pun lewat chat playground bawaan — semuanya dari browser ponsel.
@@ -62,17 +60,7 @@ export OPENAI_API_KEY=lollm-xxxx
 
 **Cline / Continue / Codex / Aider / OpenCode** — pilih provider "OpenAI Compatible", base URL `http://localhost:20999/v1`, key internal, model `Auto`.
 
-Model bisa apa pun: nama combo, `agent-auto` / `agent-debate` / `agent-parallel`, atau model provider tertentu — daftarnya di dashboard atau `GET /v1/models`.
-
-## Agent Mode
-
-| Model | Yang terjadi |
-|---|---|
-| `agent-auto` | planner → reviewer (beberapa ronde) → finalizer |
-| `agent-debate` | beberapa generator beradu argumen, judge memilih |
-| `agent-parallel` | beberapa generator paralel, merger menggabungkan |
-
-Bisa juga lewat header `X-LoLLM-Agent-Mode: true` atau flag Agent Mode di combo. Tiap panggilan internal tetap melewati routing dan fallback penuh, tercatat per-role di usage log. Kalau planner memutuskan memanggil tool, `tool_calls` diteruskan apa adanya — coding agent tetap bisa mengeksekusinya.
+Model bisa nama combo atau model provider tertentu — daftarnya di dashboard atau `GET /v1/models`.
 
 ## Pemangkasan token
 
@@ -111,7 +99,6 @@ internal/routing     mesin health-aware, fallback, weighted/sticky
 internal/health      watcher, circuit breaker, auto-recovery
 internal/providers   adapter per provider + strategi probe
 internal/compression pemangkasan token
-internal/agent       orkestrasi Agent Mode
 internal/backup      format backup.json
 internal/db          SQLite murni (tanpa CGO) + migrasi
 internal/secret      enkripsi master-key AES-256-GCM

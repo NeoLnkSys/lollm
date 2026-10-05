@@ -91,9 +91,6 @@ func TestSeedIfEmpty(t *testing.T) {
 		t.Fatalf("unexpected Auto combo: %+v", combo)
 	}
 
-	if _, err := store.DefaultAgentConfig(ctx); err != nil {
-		t.Fatalf("default agent config missing: %v", err)
-	}
 	if v, ok, _ := store.GetSetting(ctx, SettingCompressionDefault); !ok || v != "off" {
 		t.Fatalf("default compression setting missing: %q", v)
 	}

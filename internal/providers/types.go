@@ -39,16 +39,17 @@ type ChatResponse struct {
 type ErrKind string
 
 const (
-	KindRateLimited ErrKind = "rate_limited"
-	KindAuth        ErrKind = "auth"
-	KindQuota       ErrKind = "quota"
-	KindServer      ErrKind = "server"
-	KindNetwork     ErrKind = "network"
-	KindTimeout     ErrKind = "timeout"
-	KindBadRequest  ErrKind = "bad_request"
-	KindNotFound    ErrKind = "not_found"
-	KindCancelled   ErrKind = "cancelled"
-	KindUnknown     ErrKind = "unknown"
+	KindRateLimited   ErrKind = "rate_limited"
+	KindAuth          ErrKind = "auth"
+	KindQuota         ErrKind = "quota"
+	KindServer        ErrKind = "server"
+	KindNetwork       ErrKind = "network"
+	KindTimeout       ErrKind = "timeout"
+	KindBadRequest    ErrKind = "bad_request"
+	KindUnprocessable ErrKind = "unprocessable" // 422: payload ditolak provider ini, provider lain mungkin menerimanya
+	KindNotFound      ErrKind = "not_found"
+	KindCancelled     ErrKind = "cancelled"
+	KindUnknown       ErrKind = "unknown"
 )
 
 // Fallbackable reports whether a request that failed with this kind should be
@@ -60,6 +61,8 @@ func (k ErrKind) Fallbackable() bool {
 	switch k {
 	case KindBadRequest, KindCancelled:
 		return false
+	case KindUnprocessable:
+		return true
 	}
 	return true
 }

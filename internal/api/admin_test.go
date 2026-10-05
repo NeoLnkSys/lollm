@@ -133,35 +133,6 @@ func TestAdminComboCRUD(t *testing.T) {
 	}
 }
 
-func TestAdminAgentConfigCRUD(t *testing.T) {
-	s, _, _, _ := newTestAPISrv(t)
-	h := s.AdminHandler()
-
-	code, body := doReq(t, h, "POST", "/api/agent-configs",
-		`{"name":"code-review","mode":"debate","max_rounds":2,"hide_internal_steps":true,
-		 "roles":[{"name":"gen1","model":"Auto","system_prompt":"a"},{"name":"judge","model":"Auto","system_prompt":"j"}]}`, nil)
-	if code != 201 {
-		t.Fatalf("create: %d %s", code, body)
-	}
-	var a struct {
-		ID   string `json:"id"`
-		Mode string `json:"mode"`
-	}
-	json.Unmarshal([]byte(body), &a)
-	if a.Mode != "debate" {
-		t.Fatalf("mode: %s", a.Mode)
-	}
-
-	code, body = doReq(t, h, "GET", "/api/agent-configs", "", nil)
-	if code != 200 || !strings.Contains(body, "code-review") {
-		t.Fatalf("list: %d %s", code, body)
-	}
-	code, _ = doReq(t, h, "DELETE", "/api/agent-configs/"+a.ID, "", nil)
-	if code != 200 {
-		t.Fatalf("delete: %d", code)
-	}
-}
-
 func TestAdminAPIKeyLifecycle(t *testing.T) {
 	s, store, _, masterKey := newTestAPISrv(t)
 	m := providers.NewMockServer(providers.MockOK())
@@ -323,7 +294,7 @@ func TestAdminModelsEndpoint(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("models: %d %s", code, body)
 	}
-	for _, want := range []string{`"Auto"`, "agent-auto", "agent-parallel", "mock-model"} {
+	for _, want := range []string{`"Auto"`, "mock-model"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("models response missing %s: %s", want, body)
 		}

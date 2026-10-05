@@ -45,11 +45,6 @@ func (s *Server) AdminHandler() http.Handler {
 	r.Put("/api/combos/{id}", s.handleAdminUpdateCombo)
 	r.Delete("/api/combos/{id}", s.handleAdminDeleteCombo)
 
-	r.Get("/api/agent-configs", s.handleAdminListAgentConfigs)
-	r.Post("/api/agent-configs", s.handleAdminCreateAgentConfig)
-	r.Put("/api/agent-configs/{id}", s.handleAdminUpdateAgentConfig)
-	r.Delete("/api/agent-configs/{id}", s.handleAdminDeleteAgentConfig)
-
 	r.Get("/api/api-keys", s.handleAdminListAPIKeys)
 	r.Post("/api/api-keys", s.handleAdminCreateAPIKey)
 	r.Patch("/api/api-keys/{id}", s.handleAdminPatchAPIKey)
@@ -147,7 +142,7 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 	conns, _ := s.store.ListConnections(ctx)
 
 	cutoff := time.Now().Add(-24 * time.Hour)
-	var requests, ok24, pTokens, cTokens, saved, agentCalls int
+	var requests, ok24, pTokens, cTokens, saved int
 	var latencySum, latencyN int64
 	for _, l := range logs {
 		if l.CreatedAt.Before(cutoff) || l.StatusCode == 0 && l.Error == "" && l.LatencyMs == 0 {
@@ -166,9 +161,6 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 		pTokens += l.PromptTokens
 		cTokens += l.CompletionTokens
 		saved += l.TokensSaved
-		if l.AgentRole != "" {
-			agentCalls++
-		}
 		latencySum += int64(l.LatencyMs)
 		latencyN++
 	}
@@ -194,7 +186,6 @@ func (s *Server) handleAdminOverview(w http.ResponseWriter, r *http.Request) {
 		"prompt_tokens":  pTokens,
 		"completion":     cTokens,
 		"tokens_saved":   saved,
-		"agent_calls":    agentCalls,
 		"avg_latency_ms": avg,
 		"connections":    status,
 		"total_conn":     len(conns),
@@ -397,11 +388,10 @@ func (s *Server) handleAdminTestConnection(w http.ResponseWriter, r *http.Reques
 // --- combos -----------------------------------------------------------------------
 
 type comboInput struct {
-	Name             string          `json:"name"`
-	Strategy         string          `json:"strategy"`
-	Compression      string          `json:"compression"`
-	AgentModeEnabled bool            `json:"agent_mode_enabled"`
-	Models           []db.ComboModel `json:"models"`
+	Name        string          `json:"name"`
+	Strategy    string          `json:"strategy"`
+	Compression string          `json:"compression"`
+	Models      []db.ComboModel `json:"models"`
 }
 
 func normalizeComboStrategy(s string) string {
@@ -443,8 +433,8 @@ func (s *Server) handleAdminCreateCombo(w http.ResponseWriter, r *http.Request) 
 	}
 	c := &db.Combo{
 		Name: strings.TrimSpace(in.Name), Strategy: normalizeComboStrategy(in.Strategy),
-		Compression: normalizeCompression(in.Compression), AgentModeEnabled: in.AgentModeEnabled,
-		Models: in.Models,
+		Compression: normalizeCompression(in.Compression),
+		Models:      in.Models,
 	}
 	if len(c.Models) == 0 {
 		writeAdminError(w, errBadInput("combo needs at least one model entry"))
@@ -472,8 +462,8 @@ func (s *Server) handleAdminUpdateCombo(w http.ResponseWriter, r *http.Request) 
 	c := &db.Combo{
 		ID: existing.ID, CreatedAt: existing.CreatedAt,
 		Name: strings.TrimSpace(in.Name), Strategy: normalizeComboStrategy(in.Strategy),
-		Compression: normalizeCompression(in.Compression), AgentModeEnabled: in.AgentModeEnabled,
-		Models: in.Models,
+		Compression: normalizeCompression(in.Compression),
+		Models:      in.Models,
 	}
 	if c.Name == "" {
 		c.Name = existing.Name
@@ -494,97 +484,6 @@ func (s *Server) handleAdminUpdateCombo(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAdminDeleteCombo(w http.ResponseWriter, r *http.Request) {
 	if err := s.store.DeleteCombo(r.Context(), chi.URLParam(r, "id")); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"ok": true})
-}
-
-// --- agent configs ------------------------------------------------------------------
-
-type agentConfigInput struct {
-	Name              string         `json:"name"`
-	Mode              string         `json:"mode"`
-	MaxRounds         int            `json:"max_rounds"`
-	HideInternalSteps bool           `json:"hide_internal_steps"`
-	Roles             []db.AgentRole `json:"roles"`
-}
-
-func (s *Server) handleAdminListAgentConfigs(w http.ResponseWriter, r *http.Request) {
-	cfgs, err := s.store.ListAgentConfigs(r.Context())
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"agent_configs": cfgs})
-}
-
-func normalizeAgentMode(m string) string {
-	switch m {
-	case db.AgentModeDebate, db.AgentModeParallel:
-		return m
-	default:
-		return db.AgentModeCollaborative
-	}
-}
-
-func (s *Server) handleAdminCreateAgentConfig(w http.ResponseWriter, r *http.Request) {
-	var in agentConfigInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
-		return
-	}
-	a := &db.AgentConfig{
-		Name: strings.TrimSpace(in.Name), Mode: normalizeAgentMode(in.Mode),
-		MaxRounds: in.MaxRounds, HideInternalSteps: in.HideInternalSteps, Roles: in.Roles,
-	}
-	if a.Name == "" || len(a.Roles) == 0 {
-		writeAdminError(w, errBadInput("name and at least one role are required"))
-		return
-	}
-	if err := s.store.CreateAgentConfig(r.Context(), a); err != nil {
-		writeAdminError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusCreated, a)
-}
-
-func (s *Server) handleAdminUpdateAgentConfig(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
-	existing, err := s.store.GetAgentConfig(r.Context(), id)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]any{"error": "agent config not found"})
-		return
-	}
-	var in agentConfigInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid JSON"})
-		return
-	}
-	a := &db.AgentConfig{
-		ID: existing.ID, CreatedAt: existing.CreatedAt,
-		Name: strings.TrimSpace(in.Name), Mode: normalizeAgentMode(in.Mode),
-		MaxRounds: in.MaxRounds, HideInternalSteps: in.HideInternalSteps, Roles: in.Roles,
-	}
-	if a.Name == "" {
-		a.Name = existing.Name
-	}
-	if a.Roles == nil {
-		a.Roles = existing.Roles
-	}
-	if len(a.Roles) == 0 {
-		writeAdminError(w, errBadInput("at least one role is required"))
-		return
-	}
-	if err := s.store.UpdateAgentConfig(r.Context(), a); err != nil {
-		writeAdminError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, a)
-}
-
-func (s *Server) handleAdminDeleteAgentConfig(w http.ResponseWriter, r *http.Request) {
-	if err := s.store.DeleteAgentConfig(r.Context(), chi.URLParam(r, "id")); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
 		return
 	}
@@ -699,7 +598,6 @@ func (s *Server) handleAdminModels(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"combos":    names,
-		"agents":    []string{"agent-auto", "agent-debate", "agent-parallel"},
 		"providers": byProvider,
 	})
 }

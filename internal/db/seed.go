@@ -25,27 +25,7 @@ func SeedIfEmpty(ctx context.Context, s *Store, masterKey []byte) error {
 		}
 	}
 
-	// 2) Default Agent Mode config.
-	if configs, err := s.ListAgentConfigs(ctx); err != nil {
-		return err
-	} else if len(configs) == 0 {
-		cfg := &AgentConfig{
-			Name: "default",
-			Mode: AgentModeCollaborative,
-			Roles: []AgentRole{
-				{Name: "planner", Model: "Auto", SystemPrompt: "You are the main planner. Produce a complete, working first draft of the requested answer."},
-				{Name: "reviewer", Model: "Auto", SystemPrompt: "You are a strict reviewer. Criticize the draft: find bugs, logical errors, missing edge cases, and unclear parts. Be specific and actionable."},
-				{Name: "finalizer", Model: "Auto", SystemPrompt: "You produce the final polished answer, applying the reviewer's fixes. Output only the final answer, nothing else."},
-			},
-			MaxRounds:         2,
-			HideInternalSteps: true,
-		}
-		if err := s.CreateAgentConfig(ctx, cfg); err != nil {
-			return err
-		}
-	}
-
-	// 3) Demo connections + "Auto" combo.
+	// 2) Demo connections + "Auto" combo.
 	conns, err := s.ListConnections(ctx)
 	if err != nil {
 		return err

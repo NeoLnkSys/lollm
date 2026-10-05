@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.1 "Synapse" — 2026-10-05
+
+Fokus: stabilitas combo routing.
+
+- **Kompatibilitas klien** — field non-standar di pesan (mis. `model_id` dari Grok CLI) otomatis dibersihkan sebelum diteruskan ke provider, memperbaiki error 422 `extra_forbidden` dari upstream yang ketat.
+- **422 kini fallback-able** — jika satu provider menolak payload, request otomatis dicoba ke provider berikutnya di combo.
+- **Agent Mode dihapus** — fokus penuh pada routing dan fallback combo model. (Pengguna v0.1.0: import backup lama tetap aman; entri agent diabaikan.)
+
 ## v0.1.0 "Synapse" — 2026-10-05
 
 Rilis perdana.

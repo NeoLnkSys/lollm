@@ -183,6 +183,7 @@ func TestChatErrorKinds(t *testing.T) {
 		{"quota 402", MockStatus(402), KindQuota, true},
 		{"not found 404", MockStatus(404), KindNotFound, true},
 		{"bad request 400", MockStatus(400), KindBadRequest, false},
+		{"unprocessable 422", MockStatus(422), KindUnprocessable, true},
 		{"server 503", MockStatus(503), KindServer, true},
 	}
 	for _, tc := range cases {

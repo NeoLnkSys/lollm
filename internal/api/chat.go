@@ -52,14 +52,9 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusBadRequest, "'model' is required (a combo name or a plain model id).", "invalid_request_error", "invalid_request")
 		return
 	}
-	stream, _ := body["stream"].(bool)
+	sanitizeMessages(body) // strip field non-standar (mis. "model_id" dari Grok CLI)
 
-	// --- Agent Mode via model name (spec 3.7): agent-auto / agent-debate /
-	// agent-parallel ---------------------------------------------------------
-	if ok, mode := agentModeFromModel(modelName); ok {
-		s.handleAgentRequest(w, r, body, stream, agentBaseCombo(r), mode, modelName, apiKeyID, requestID)
-		return
-	}
+	stream, _ := body["stream"].(bool)
 
 	// --- resolve combo ----------------------------------------------------------
 	conns, err := s.store.ListConnections(ctx)
@@ -72,12 +67,6 @@ func (s *Server) handleChatCompletions(w http.ResponseWriter, r *http.Request) {
 	combo, err := s.resolveCombo(r, modelName, conns)
 	if err != nil {
 		writeOpenAIError(w, http.StatusNotFound, err.Error(), "invalid_request_error", "model_not_found")
-		return
-	}
-
-	// --- Agent Mode via combo flag or header (spec 3.7) --------------------------
-	if am := headerAgentMode(r); combo.AgentModeEnabled || am != "" {
-		s.handleAgentRequest(w, r, body, stream, combo.Name, am, modelName, apiKeyID, requestID)
 		return
 	}
 
