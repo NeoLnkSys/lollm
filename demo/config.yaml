@@ -1,0 +1,5 @@
+host: "0.0.0.0"
+api_port: 20999
+dashboard_port: 21000
+db_path: "./demo/data/lollm.db"
+log_level: "info"

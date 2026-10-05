@@ -1,0 +1,81 @@
+{
+  "//": "Contoh backup LoLLM Synapse (format lollm-backup v1). Dihasilkan oleh `lollm export-config`, direstorasi via `lollm import-config backup.json` atau dashboard Settings → Backup. File contoh ini TIDAK berisi API key provider (mode secrets: none). Export dengan `--secrets --password <pw>` untuk menyertakan key dalam bentuk terenkripsi (PBKDF2-AES-256-GCM).",
+  "format": "lollm-backup",
+  "version": 1,
+  "product": "LoLLM Synapse",
+  "exported_at": "2026-10-05T00:00:00Z",
+  "secrets": "none",
+  "connections": [
+    {
+      "name": "openrouter-main",
+      "provider": "openrouter",
+      "base_url": "",
+      "priority": 1,
+      "weight": 1,
+      "is_active": true,
+      "models": ["openai/gpt-4o-mini", "qwen/qwen3-235b-a22b:free"]
+    },
+    {
+      "name": "gemini-free",
+      "provider": "gemini",
+      "priority": 1,
+      "weight": 1,
+      "is_active": true,
+      "models": ["gemini-2.5-flash", "gemini-2.5-pro"]
+    },
+    {
+      "name": "local-ollama",
+      "provider": "ollama",
+      "base_url": "http://127.0.0.1:11434/v1",
+      "priority": 5,
+      "weight": 1,
+      "is_active": true,
+      "models": ["gpt-oss:20b", "llama3.2"]
+    }
+  ],
+  "proxy_pools": [
+    {
+      "name": "relays",
+      "proxies": ["socks5://127.0.0.1:1080", "http://user:pass@relay.example.com:8080"]
+    }
+  ],
+  "combos": [
+    {
+      "name": "Auto",
+      "strategy": "health_aware",
+      "compression": "",
+      "agent_mode_enabled": false,
+      "models": [
+        { "connection": "openrouter-main", "model": "qwen/qwen3-235b-a22b:free", "priority": 1 },
+        { "connection": "gemini-free", "model": "gemini-2.5-flash", "priority": 2 },
+        { "connection": "local-ollama", "model": "gpt-oss:20b", "priority": 3 }
+      ]
+    }
+  ],
+  "agent_configs": [
+    {
+      "name": "default",
+      "mode": "collaborative",
+      "max_rounds": 1,
+      "hide_internal_steps": true,
+      "roles": [
+        { "name": "planner", "model": "Auto", "system_prompt": "You are the main planner. Produce a complete, working first draft of the requested answer." },
+        { "name": "reviewer", "model": "Auto", "system_prompt": "You are a strict reviewer. Criticize the draft: find bugs, logical errors, missing edge cases, and unclear parts." },
+        { "name": "finalizer", "model": "Auto", "system_prompt": "You produce the final polished answer, applying the reviewer's fixes. Output only the final answer." }
+      ]
+    }
+  ],
+  "api_keys": [
+    {
+      "name": "cursor",
+      "key_hash": "<sha256 hash — key internal klien; plaintext tidak pernah disimpan>",
+      "key_prefix": "lollm-AbCd…",
+      "is_active": true
+    }
+  ],
+  "settings": {
+    "compression.default": "off",
+    "health_check.enabled": "true",
+    "health_check.interval_seconds": "60"
+  }
+}

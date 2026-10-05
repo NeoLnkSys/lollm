@@ -1,0 +1,14 @@
+# LoLLM configuration
+#
+# Precedence (highest → lowest): CLI flags > environment variables > this file > defaults.
+# Environment variables: HOST, API_PORT, DASHBOARD_PORT, DB_PATH, LOG_LEVEL, CONFIG
+# (LOLLM_-prefixed variants win over the plain ones: LOLLM_HOST, LOLLM_API_PORT, ...)
+#
+# Connections, combos, proxy pools, API keys, agent-mode settings, and usage logs
+# live in SQLite (db_path) — managed via the dashboard or `lollm import-config`.
+
+host: "0.0.0.0"           # bind address for API and dashboard
+api_port: 20999            # OpenAI-compatible API -> http://localhost:20999/v1
+dashboard_port: 21000      # web dashboard         -> http://localhost:21000
+db_path: "./data/lollm.db" # SQLite database location (dir is created if missing)
+log_level: "info"          # debug | info | warn | error

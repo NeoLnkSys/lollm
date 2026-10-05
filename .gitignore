@@ -1,0 +1,23 @@
+# Build artifacts
+/bin/
+*.test
+
+# Runtime data (local dev)
+/data/
+*.db
+*.db-wal
+*.db-shm
+.master.key
+
+# Local runtime config (ship configs/config.example.yaml instead)
+/config.yaml
+
+# Live-testing workspace (contains REAL provider keys in recon.json / DB)
+/live/
+
+# OS / editor noise
+.DS_Store
+*.swp
+
+# Release artifacts (uploaded as GitHub Release assets, not committed)
+/release/
