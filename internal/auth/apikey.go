@@ -15,8 +15,6 @@ import (
 const (
 	// KeyPrefix marks regular internal API keys.
 	KeyPrefix = "lollm-"
-	// AdminTokenPrefix marks dashboard admin tokens.
-	AdminTokenPrefix = "lollm-admin-"
 )
 
 // GenerateKey returns a fresh random key with the given prefix, e.g.
@@ -31,9 +29,6 @@ func GenerateKey(prefix string) (string, error) {
 
 // GenerateAPIKey returns a new internal API key (plain text).
 func GenerateAPIKey() (string, error) { return GenerateKey(KeyPrefix) }
-
-// GenerateAdminToken returns a new dashboard admin token (plain text).
-func GenerateAdminToken() (string, error) { return GenerateKey(AdminTokenPrefix) }
 
 // HashKey returns the SHA-256 hex digest of a key.
 func HashKey(plain string) string {

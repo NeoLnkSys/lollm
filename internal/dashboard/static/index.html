@@ -115,6 +115,17 @@
   .ccard .acts{display:flex;gap:6px;margin-top:10px;flex-wrap:wrap}
   .list{display:flex;flex-direction:column;gap:6px}
   .lrow{background:var(--panel);border:none;border-radius:var(--shape-s);padding:10px 14px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;font-size:12.5px}
+  /* ---- proxy per-card ---- */
+  .pgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(250px,100%),1fr));gap:8px;margin-top:10px}
+  .pcard{background:var(--panel2);border-radius:var(--radius);padding:10px 12px;display:flex;flex-direction:column;gap:8px;min-width:0}
+  .pcard .purl{font-size:11.5px;word-break:break-all}
+  /* ---- combo model picker (filter chip) ---- */
+  .mchip{display:inline-flex;align-items:center;gap:6px;background:hsl(var(--hue) 16% 14%);border-radius:var(--shape-full);padding:7px 14px;font-size:12.5px;font-weight:500;cursor:pointer;user-select:none;transition:background .15s,color .15s}
+  .mchip:hover{filter:brightness(1.15)}
+  .mchip.on{background:var(--pri-c);color:var(--on-pri-c);font-weight:600}
+  .selrow{display:flex;align-items:center;gap:8px;background:var(--panel2);border-radius:var(--shape-s);padding:8px 12px;font-size:12.5px;flex-wrap:wrap}
+  /* ---- chat: reasoning block ---- */
+  .msg .reason{font-size:11.5px;color:var(--dim);border-left:2px solid var(--line);padding-left:8px;margin:2px 0 6px;white-space:pre-wrap}
   /* ---- mobile-first (target utama: perangkat mobile) ---- */
   #bnav{display:none}
   #msheet{display:none;position:fixed;inset:0;z-index:45}
@@ -131,14 +142,17 @@
     #app{height:100vh;height:100dvh;overflow:hidden}
     #side{display:none}
     #bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:40;background:rgba(14,19,32,.94);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom));justify-content:space-around}
-    .bitem{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;color:var(--dim);font-size:10.5px;font-weight:600;min-width:58px;min-height:44px;justify-content:center;cursor:pointer;border-radius:var(--shape-full);transition:color .2s}
-    .bitem .icwrap{display:flex;align-items:center;justify-content:center;width:60px;height:34px;border-radius:var(--shape-full);transition:background .25s}
+    .bitem{display:flex;flex-direction:column;align-items:center;gap:3px;padding:6px 4px;color:var(--dim);font-size:10.5px;font-weight:600;min-width:58px;height:48px;justify-content:center;cursor:pointer;border-radius:var(--shape-full);transition:color .2s;white-space:nowrap;overflow:hidden}
+    .bitem .icwrap{display:flex;align-items:center;justify-content:center;width:60px;height:32px;border-radius:var(--shape-full);transition:background .25s}
     .bitem svg.ic{width:21px;height:21px}
     .bitem.on{color:var(--accent)}
     .bitem.on .icwrap{background:var(--sec-c)}
     #main{padding:12px 12px 0}
     .page.on{overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:calc(84px + env(safe-area-inset-bottom))}
-    #p-chat.on{overflow:hidden;padding-bottom:calc(70px + env(safe-area-inset-bottom))}
+    /* area input chat harus selalu di atas bottom bar: padding = tinggi bar
+       sesungguhnya (diukur JS, fallback 76px) + ruang napas */
+    #p-chat.on{overflow:hidden;padding-bottom:var(--bnavpx,calc(76px + env(safe-area-inset-bottom)))}
+    #chatinput{padding-bottom:2px}
     h1{font-size:17px}
     input,select,textarea{font-size:16px} /* cegah auto-zoom iOS saat fokus */
     button{min-height:44px}
@@ -277,6 +291,7 @@
     <!-- POOLS -->
     <section class="page" id="p-pools">
       <h1>Proxy Pools</h1>
+      <div class="toolbar"><button class="primary" onclick="poolForm()"><svg class="ic"><use href="#i-plus"/></svg>Tambah Pool</button><span class="muted small" id="poolsum"></span></div>
       <div id="poollist" class="cards2"></div>
     </section>
 
@@ -324,11 +339,16 @@
         <div id="impmsg" class="small"></div>
       </div>
       <div class="panel" style="max-width:520px;margin-top:14px">
-        <h2>Dashboard Admin Token <span class="p-dim pill" id="tokstate">off</span></h2>
-        <p class="muted small">Jika di-set, semua akses /api/* (manage) minta token ini. Chat playground tetap pakai API key biasa.</p>
-        <div class="row">
-          <button onclick="tokGen()">Generate token</button>
-          <button class="danger" onclick="tokClear()">Hapus token</button>
+        <h2>Password Dashboard <span class="pill p-ok" id="pwstate">aktif</span></h2>
+        <p class="muted small">Dashboard dilindungi password (sesi cookie 7 hari, otomatis login). Akses /api dari script/curl: header <b>X-LoLLM-Token: &lt;password&gt;</b>.</p>
+        <div class="formgrid">
+          <label class="f">Password lama<input id="pw-old" type="password" autocomplete="off"></label>
+          <label class="f">Password baru (min 4)<input id="pw-new" type="password" autocomplete="off"></label>
+        </div>
+        <div class="row" style="margin-top:12px">
+          <button class="primary" onclick="pwChange()">Ubah password</button>
+          <button onclick="doLogout()">Logout</button>
+          <span id="pw-msg" class="small"></span>
         </div>
       </div>
     </section>
@@ -349,6 +369,18 @@ function applyHue(h){
 }
 applyHue(localStorage.getItem("lollm_hue"));
 const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+/* ---------- bottom bar: pastikan area input chat tidak tertutup ----------
+   Tinggi bar diukur nyata (termasuk safe-area & font-scale Android) lalu
+   dipakai sebagai padding-bottom halaman chat via var --bnavpx. */
+function fitBnav(){
+  if(!matchMedia("(max-width:899px)").matches){document.documentElement.style.removeProperty("--bnavpx");return}
+  const b=$("#bnav");if(!b)return;
+  document.documentElement.style.setProperty("--bnavpx",(b.offsetHeight+10)+"px");
+}
+addEventListener("resize",fitBnav);
+addEventListener("orientationchange",fitBnav);
+addEventListener("load",fitBnav);
+fitBnav();
 const ic=(n,c="")=>`<svg class="ic ${c}" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const fmtT=t=>t?new Date(t).toLocaleString("id-ID",{dateStyle:"short",timeStyle:"medium"}):"—";
@@ -356,21 +388,45 @@ const PROVIDERS=["openrouter","gemini","groq","mistral","cloudflare-ai","ollama"
 const STRATEGIES=["health_aware","round_robin","sequential","sticky","fusion"];
 
 /* ---------- fetch helpers ---------- */
-function adminToken(){return localStorage.getItem("lollm_admin_token")||""}
+let loginNeeded=false;
 async function api(path,opts={}){
+  if(loginNeeded)throw new Error("login diperlukan");
   opts.headers=Object.assign({"Content-Type":"application/json"},opts.headers||{});
-  if(adminToken())opts.headers["X-LoLLM-Token"]=adminToken();
   let r=await fetch(path,opts);
   if(r.status===401){
     let d={};try{d=await r.json()}catch(e){}
-    if(d.code==="dashboard_token_required"){
-      const tok=prompt("Dashboard dilindungi admin token. Tempel token (lollm-admin-…):");
-      if(tok){localStorage.setItem("lollm_admin_token",tok);opts.headers["X-LoLLM-Token"]=tok;r=await fetch(path,opts)}
+    if(d.code==="dashboard_password_required"){
+      loginNeeded=true;
+      showLogin(d.default_active);
+      throw new Error("login diperlukan");
     }
   }
   return r;
 }
 async function japi(path,opts){const r=await api(path,opts);let d={};try{d=await r.json()}catch(e){}if(!r.ok)throw new Error(d.error||r.status);return d}
+
+/* ---------- dashboard login (password) ---------- */
+function showLogin(defActive){
+  modal(`<div style="text-align:center;margin-bottom:16px">
+    <div style="font-weight:700;font-size:19px">Lo<span style="color:var(--accent)">LLM</span> Synapse</div>
+    <div class="muted small">masuk untuk mengelola dashboard</div></div>
+  <label class="f">Password<input id="lpass" type="password" autofocus onkeydown="if(event.key==='Enter')doLogin()"></label>
+  <div id="lmsg" class="small" style="margin-top:6px;color:var(--err);min-height:18px"></div>
+  ${defActive?'<div class="muted small" style="margin-top:6px">password default: <b>edoll123</b> — segera ganti di Settings setelah masuk</div>':""}
+  <button class="primary" style="width:100%;margin-top:14px" onclick="doLogin()">Masuk</button>`);
+  setTimeout(()=>{const i=$("#lpass");if(i)i.focus()},50);
+}
+async function doLogin(){
+  const box=$("#lpass"),msg=$("#lmsg");
+  msg.textContent="";box.disabled=true;
+  try{
+    const r=await fetch("/api/login",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({password:box.value})});
+    const d=await r.json().catch(()=>({}));
+    if(r.ok){location.reload();return}
+    msg.textContent=d.error||"login gagal";
+  }catch(e){msg.textContent=e.message}
+  box.disabled=false;box.value="";box.focus();
+}
 
 /* ---------- routing ---------- */
 const PAGES=["chat","connections","combos","keys","usage","models","pools","settings"];
@@ -392,7 +448,7 @@ window.addEventListener("hashchange",()=>nav(location.hash.replace("#/","")));
 /* ---------- modal ---------- */
 function modal(html){$("#overlay").classList.add("on");$("#modal").innerHTML=html}
 function closeModal(){$("#overlay").classList.remove("on");$("#modal").innerHTML=""}
-$("#overlay").addEventListener("click",e=>{if(e.target.id==="overlay")closeModal()});
+$("#overlay").addEventListener("click",e=>{if(e.target.id==="overlay"&&!loginNeeded)closeModal()});
 
 /* ============================================================
    CHAT PLAYGROUND
@@ -434,7 +490,8 @@ function renderChat(){
     const steps=(m.steps||[]).map(s=>`<div>${ic("chevron-right")}<span>${esc(s.role)} ${esc(s.status)}${s.round?" · ronde "+s.round:""}${s.detail?" · "+esc(s.detail):""}</span></div>`).join("");
     const tools=m.tools?`<pre>${esc(m.tools)}</pre>`:"";
     const stats=m.stats?`<div class="stats">${m.stats}</div>`:"";
-    return `<div class="msg bot">${m.pending?'<span class="spin"></span>':""}${esc(m.content)}${tools}${steps?`<div class="steps">${steps}</div>`:""}${stats}</div>`;
+    const reason=m.reason?`<div class="reason">${esc(m.reason)}</div>`:"";
+    return `<div class="msg bot">${m.pending?'<span class="spin"></span>':""}${reason}${esc(m.content)}${tools}${steps?`<div class="steps">${steps}</div>`:""}${stats}</div>`;
   }).join("");
   box.scrollTop=box.scrollHeight;
 }
@@ -466,33 +523,36 @@ async function send(){
     }
     const ct=res.headers.get("Content-Type")||"";
     if(body.stream&&ct.includes("event-stream")){
+      // Gateway (dan umumnya provider OpenAI-compat) mengirim frame SSE
+      // "data: {...}" TANPA baris "event:" — jadi jangan filter berdasarkan
+      // nama event; proses semua frame ber-"data:" yang valid JSON-nya.
       const reader=res.body.getReader(),dec=new TextDecoder();let buf="";
       while(true){
         const {done,value}=await reader.read();if(done)break;
-        buf+=dec.decode(value,{stream:true});let i;
+        buf+=dec.decode(value,{stream:true}).replace(/\r\n/g,"\n");let i;
         while((i=buf.indexOf("\n\n"))>=0){
           const frame=buf.slice(0,i);buf=buf.slice(i+2);
-          let ev="message",data="";
+          let data="";
           for(const line of frame.split("\n")){
-            if(line.startsWith("event:"))ev=line.slice(6).trim();
-            else if(line.startsWith("data:"))data+=line.slice(5).trim();
+            if(line.startsWith("data:"))data+=line.slice(5).trim();
           }
-          if(!data||data==="[DONE]")continue;
+          if(!data||data==="[DONE]")continue; // komentar SSE / keep-alive / penutup
           let j={};try{j=JSON.parse(data)}catch(e){continue}
-          if(ev==="chat.completion.chunk"){
-            const ch=(j.choices&&j.choices[0])||{};
-            const d=ch.delta||{};
-            if(d.content)bot.content+=d.content;
-            if(d.tool_calls)bot.tools=JSON.stringify(d.tool_calls,null,1);
-            if(ch.finish_reason==="stop"&&j.usage)bot.stats=`token: ${j.usage.prompt_tokens||0}→${j.usage.completion_tokens||0}`;
-            renderChat();
-          }
+          const ch=(j.choices&&j.choices[0])||{};
+          const d=ch.delta||ch.message||{};
+          if(d.reasoning)bot.reason=(bot.reason||"")+d.reasoning;
+          if(d.content)bot.content+=d.content;
+          if(d.tool_calls)bot.tools=JSON.stringify(d.tool_calls,null,1);
+          if(ch.finish_reason&&j.usage)bot.stats=`token: ${j.usage.prompt_tokens||0}→${j.usage.completion_tokens||0}`;
+          renderChat();
         }
       }
+      if(!bot.content&&!bot.reason&&!bot.tools)bot.content="(stream selesai tanpa konten — coba matikan stream)";
     }else{
       const j=await res.json();
       const m=(j.choices&&j.choices[0]&&j.choices[0].message)||{};
       bot.content=m.content||"";
+      bot.reason=m.reasoning||"";
       if(m.tool_calls)bot.tools=JSON.stringify(m.tool_calls,null,1);
       const bits=[];
       if(j.usage)bits.push(`${j.usage.prompt_tokens||0}→${j.usage.completion_tokens||0} token`);
@@ -597,23 +657,120 @@ async function loadCombos(){
     </div>
   </div>`).join("")||`<div class="muted">belum ada combo</div>`;
 }
-function comboForm(c){
-  c=c||{models:[{connection_id:"",model:"",priority:1}]};
-  const rows=(c.models||[]).map(m=>comboRow(m)).join("");
+let comboSel={}, comboManual=false, selArr=[], connModels={};
+async function comboForm(c){
+  c=c||{models:[]};
+  if(!conns.length){try{const d=await japi("/api/connections");conns=d.connections||[]}catch(e){}}
+  comboSel={};comboManual=false;
+  (c.models||[]).forEach(m=>comboSel[m.connection_id+"\n"+m.model]=m.priority||1);
   modal(`<h3>${c.id?"Edit":"Tambah"} Combo</h3>
   <div class="formgrid">
     <label class="f">Name*<input id="f-name" value="${esc(c.name||"")}"></label>
     <label class="f">Strategy<select id="f-strat">${STRATEGIES.map(s=>`<option ${s===c.strategy?"selected":""}>${s}</option>`).join("")}</select></label>
     <label class="f">Compression<select id="f-comp"><option value="">inherit</option><option ${"off"===c.compression?"selected":""}>off</option><option ${"partial"===c.compression?"selected":""}>partial</option><option ${"full"===c.compression?"selected":""}>full</option></select></label>
   </div>
-  <h2 style="margin-top:14px">Models</h2>
-  <div id="frows">${rows}</div>
-  <button class="small" onclick="addComboRow()">${ic("plus")}row</button>
+  <div class="row" style="margin-top:14px">
+    <h2 class="grow" style="margin:0">Pilih Model</h2>
+    <button class="small" id="f-manualbtn"></button>
+  </div>
+  <p class="muted small" style="margin:4px 0 8px">Centang model per connection — model diambil langsung dari API sumber (v1/models). Priority terisi otomatis sesuai urutan centang (1 = utama, 2+ = fallback) dan bisa diubah.</p>
+  <input id="f-search" placeholder="cari model di connection yang sudah dimuat…" style="width:100%">
+  <div id="pickbox" style="margin-top:8px"></div>
+  <div id="f-manual" style="display:none;margin-top:8px"></div>
+  <div class="row" style="margin-top:6px;display:none" id="manualhint">
+    <button class="small" onclick="addComboRow()">${ic("plus")}row</button>
+    <span class="muted small">mode manual: tulis model bebas</span>
+  </div>
+  <h2 style="margin-top:14px">Terpilih <span class="muted" id="selcount"></span></h2>
+  <div id="selbox" class="list"></div>
   <div class="row" style="margin-top:16px;justify-content:flex-end">
     <button onclick="closeModal()">Batal</button>
     <button class="primary" onclick="saveCombo('${c.id||""}')">Simpan</button>
   </div>`);
+  $("#f-search").oninput=()=>renderPicker();
+  $("#f-manualbtn").onclick=toggleComboManual;
+  setManualBtn();
+  renderPicker();
 }
+function setManualBtn(){$("#f-manualbtn").innerHTML=comboManual?ic("check")+"mode centang":ic("pencil")+"mode manual"}
+function toggleComboManual(){
+  comboManual=!comboManual;
+  if(comboManual){
+    $("#f-manual").innerHTML=(selArr.length?selArr.map(x=>comboRow({connection_id:x.cid,model:x.m,priority:x.p})):[comboRow()]).join("");
+    $("#pickbox").style.display="none";$("#f-search").style.display="none";$("#f-manual").style.display="block";
+    $("#manualhint").style.display="flex";
+  }else{
+    comboSel={};
+    [...$("#f-manual").children].forEach(r=>{
+      const cid=r.querySelector(".r-conn").value,m=r.querySelector(".r-model").value.trim(),p=+r.querySelector(".r-prio").value||1;
+      if(cid&&m)comboSel[cid+"\n"+m]=p;
+    });
+    $("#f-manual").style.display="none";$("#pickbox").style.display="block";$("#f-search").style.display="block";
+    $("#manualhint").style.display="none";
+    renderPicker();
+  }
+  setManualBtn();
+}
+function renderPicker(){
+  if(!$("#pickbox"))return;
+  const q=($("#f-search").value||"").toLowerCase();
+  const act=conns.filter(x=>x.is_active!==false);
+  $("#pickbox").innerHTML=act.map(cn=>{
+    const ms=connModels[cn.id];
+    let chips="";
+    if(Array.isArray(ms)){
+      const fl=ms.map((m,i)=>({m,i})).filter(x=>!q||String(x.m).toLowerCase().includes(q));
+      chips=fl.map(x=>{
+        const on=comboSel[cn.id+"\n"+x.m]!==undefined;
+        return `<span class="mchip ${on?"on":""}" role="button" aria-pressed="${on}" onclick="toggleChip('${cn.id}',${x.i})">${on?ic("check"):ic("plus")}${esc(x.m)}</span>`;
+      }).join("")||`<span class="muted small">tidak ada model cocok</span>`;
+    }
+    return `<div class="panel" style="padding:10px 12px;margin-bottom:8px">
+      <div class="row">
+        <b>${esc(cn.name)}</b>${statusPill(cn.status)}
+        <span class="grow"></span>
+        ${Array.isArray(ms)
+          ?`<span class="pill p-dim">${ms.length} model</span><button class="small" title="muat ulang" onclick="loadConnModels('${cn.id}',null)">${ic("zap")}</button>`
+          :`<button class="small" onclick="loadConnModels('${cn.id}',this)">${ic("zap")}muat model</button>`}
+      </div>
+      ${chips?`<div class="row" style="margin-top:8px">${chips}</div>`:""}
+    </div>`;
+  }).join("")||`<div class="muted small">belum ada connection aktif — buat dulu di tab Connections</div>`;
+  renderSel();
+}
+async function loadConnModels(id,btn){
+  if(btn){btn.disabled=true;btn.innerHTML='<span class="spin"></span>'}
+  try{
+    const d=await japi(`/api/connections/${id}/models`);
+    let ms=d.models||[];
+    if(!ms.length){const c=conns.find(x=>x.id===id);ms=(c&&c.models)||[]}
+    connModels[id]=ms;
+  }catch(e){
+    const c=conns.find(x=>x.id===id);
+    connModels[id]=(c&&c.models)||[];
+  }
+  renderPicker();
+}
+function toggleChip(cid,idx){
+  const ms=connModels[cid];if(!Array.isArray(ms)||!ms[idx])return;
+  const k=cid+"\n"+ms[idx];
+  if(comboSel[k]!==undefined)delete comboSel[k];
+  else comboSel[k]=Object.keys(comboSel).length+1;
+  renderPicker();
+}
+function renderSel(){
+  if(!$("#selbox"))return;
+  selArr=Object.entries(comboSel).map(([k,p])=>{const i=k.indexOf("\n");return{cid:k.slice(0,i),m:k.slice(i+1),p:+p||1}}).sort((a,b)=>a.p-b.p);
+  $("#selcount").textContent=selArr.length?`(${selArr.length})`:"";
+  $("#selbox").innerHTML=selArr.map((x,i)=>`<div class="selrow">
+    <span class="pill p-accent">${esc((conns.find(c=>c.id===x.cid)||{name:x.cid.slice(0,8)}).name)}</span>
+    <span class="mono grow" style="overflow-wrap:anywhere">${esc(x.m)}</span>
+    <label class="row small" style="gap:4px">prio <input type="number" min="1" value="${x.p}" style="width:60px" onchange="selPrio(${i},this.value)"></label>
+    <button class="small danger" onclick="selRemove(${i})">${ic("x")}</button>
+  </div>`).join("")||`<div class="muted small">belum ada model dipilih — muat model lalu centang</div>`;
+}
+function selPrio(i,v){const x=selArr[i];if(!x)return;comboSel[x.cid+"\n"+x.m]=Math.max(1,+v||1);renderSel()}
+function selRemove(i){const x=selArr[i];if(!x)return;delete comboSel[x.cid+"\n"+x.m];renderPicker()}
 function comboRow(m){
   m=m||{connection_id:"",model:"",priority:1};
   return `<div class="row" style="margin-bottom:6px">
@@ -623,18 +780,24 @@ function comboRow(m){
     <button class="small danger" onclick="this.parentElement.remove()">${ic("x")}</button>
   </div>`;
 }
-function addComboRow(){$("#frows").insertAdjacentHTML("beforeend",comboRow())}
+function addComboRow(){$("#f-manual").insertAdjacentHTML("beforeend",comboRow())}
 async function saveCombo(id){
-  const models=[...$("#frows").children].map(r=>({
-    connection_id:r.querySelector(".r-conn").value,
-    model:r.querySelector(".r-model").value.trim(),
-    priority:+r.querySelector(".r-prio").value||1
-  })).filter(m=>m.model);
+  let models;
+  if(comboManual){
+    models=[...$("#f-manual").children].map(r=>({
+      connection_id:r.querySelector(".r-conn").value,
+      model:r.querySelector(".r-model").value.trim(),
+      priority:+r.querySelector(".r-prio").value||1
+    })).filter(m=>m.model&&m.connection_id);
+  }else{
+    models=selArr.map(x=>({connection_id:x.cid,model:x.m,priority:x.p}));
+  }
+  if(!models.length){alert("Pilih minimal satu model untuk combo.");return}
   const body={name:$("#f-name").value,strategy:$("#f-strat").value,compression:$("#f-comp").value,
     models};
   try{
     await japi(id?`/api/combos/${id}`:"/api/combos",{method:id?"PUT":"POST",body:JSON.stringify(body)});
-    closeModal();loadCombos();
+    closeModal();loadCombos();loadModelSelect();
   }catch(e){alert(e.message)}
 }
 async function delCombo(id,name){
@@ -720,12 +883,92 @@ async function loadModels(){
   $("#modelsbox").innerHTML=h||`<div class="muted">tidak ada model</div>`;
 }
 async function loadPools(){
-  const d=await japi("/api/proxy-pools");
-  $("#poollist").innerHTML=(d.proxy_pools||[]).map(p=>`<div class="ccard">
-    <div class="top"><b>${esc(p.name)}</b><span class="pill p-dim">${(p.proxies||[]).length} proxy</span></div>
-    <div class="sub mono">${(p.proxies||[]).map(esc).join("<br>")}</div>
-    <div class="sub">dibuat ${fmtT(p.created_at)}</div>
-  </div>`).join("")||`<div class="muted">belum ada proxy pool (buat via CLI / import)</div>`;
+  const [d,cd]=await Promise.all([japi("/api/proxy-pools"),japi("/api/connections").catch(()=>({connections:[]}))]);
+  pools=d.proxy_pools||[];const cs=cd.connections||[];
+  $("#poolsum").textContent=`${pools.length} pool · ${pools.reduce((a,p)=>a+(p.proxies||[]).length,0)} proxy`;
+  $("#poollist").innerHTML=pools.map(p=>{
+    const px=p.proxies||[];
+    const used=cs.filter(c=>c.proxy_pool_id===p.id);
+    return `<div class="ccard" style="grid-column:1/-1;max-width:880px">
+      <div class="top">
+        <b>${esc(p.name)}</b>
+        <span class="pill p-dim">${px.length} proxy</span>
+        ${used.length?`<span class="pill p-ok">in use · ${used.length} conn</span>`:`<span class="pill p-dim">idle</span>`}
+        <span class="grow"></span>
+        <button class="small" onclick="testPoolAll('${p.id}',this)">${ic("zap")}test semua</button>
+        <button class="small" onclick='poolForm(${JSON.stringify(p).replace(/'/g,"&#39;")})'>${ic("pencil")}edit</button>
+        <button class="small danger" onclick="delPool('${p.id}','${esc(p.name)}')">${ic("trash")}hapus</button>
+      </div>
+      ${used.length?`<div class="sub">dipakai oleh: ${used.map(c=>esc(c.name)).join(", ")}</div>`:`<div class="sub">belum dipakai connection mana pun</div>`}
+      <div class="pgrid">${px.map((u,i)=>{
+        const t=poolCache[u];
+        const badge=!t?`<span class="pill p-dim">belum diuji</span>`
+          :t.ok?`<span class="pill p-ok">${t.latency_ms} ms</span>`
+          :`<span class="pill p-err" title="${esc(t.error||"")}">gagal</span>`;
+        return `<div class="pcard">
+          <div class="mono purl">${esc(maskProxy(u))}</div>
+          <div class="row" style="justify-content:space-between">
+            ${badge}
+            <span class="row" style="gap:4px">
+              <button class="small" onclick="testProxy('${p.id}',${i},this)">${ic("zap")}test</button>
+              <button class="small danger" title="hapus proxy" onclick="delProxy('${p.id}',${i})">${ic("x")}</button>
+            </span>
+          </div>
+        </div>`;
+      }).join("")||`<div class="muted small">pool kosong — tambahkan proxy via edit</div>`}</div>
+    </div>`;
+  }).join("")||`<div class="muted">belum ada proxy pool — buat dengan tombol Tambah Pool</div>`;
+}
+function poolById(id){return pools.find(p=>p.id===id)}
+function maskProxy(u){try{const p=new URL(u);if(p.password)p.password="***";return p.toString().replace(/\/$/,"")}catch(e){return u}}
+async function testProxy(id,idx,btn){
+  const p=poolById(id);if(!p||!p.proxies[idx])return;const u=p.proxies[idx];
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span>';
+  try{
+    const d=await japi(`/api/proxy-pools/${id}/test?url=${encodeURIComponent(u)}`);
+    poolCache[u]=(d.results||[])[0]||{ok:false,error:"no result"};
+  }catch(e){poolCache[u]={ok:false,error:e.message}}
+  loadPools();
+}
+async function testPoolAll(id,btn){
+  btn.disabled=true;btn.innerHTML='<span class="spin"></span>testing…';
+  try{
+    const d=await japi(`/api/proxy-pools/${id}/test`);
+    (d.results||[]).forEach(r=>{poolCache[r.url]=r});
+  }catch(e){alert(e.message)}
+  loadPools();
+}
+function poolForm(p){
+  p=p||{};
+  modal(`<h3>${p.id?"Edit":"Tambah"} Proxy Pool</h3>
+  <div class="formgrid">
+    <label class="f full">Nama*<input id="f-name" value="${esc(p.name||"")}" placeholder="mis. pool-indo"></label>
+    <label class="f full">Proxy URLs (satu per baris — http://, https://, socks5://)
+      <textarea id="f-px" rows="5" placeholder="http://user:pass@host:8080&#10;socks5://host:1080">${esc((p.proxies||[]).join("\n"))}</textarea></label>
+  </div>
+  <div class="row" style="margin-top:16px;justify-content:flex-end">
+    <button onclick="closeModal()">Batal</button>
+    <button class="primary" onclick="savePool('${p.id||""}')">Simpan</button>
+  </div>`);
+}
+async function savePool(id){
+  const body={name:$("#f-name").value,proxies:$("#f-px").value.split("\n").map(s=>s.trim()).filter(Boolean)};
+  try{
+    await japi(id?`/api/proxy-pools/${id}`:"/api/proxy-pools",{method:id?"PUT":"POST",body:JSON.stringify(body)});
+    closeModal();loadPools();
+  }catch(e){alert(e.message)}
+}
+async function delPool(id,name){
+  if(!confirm(`Hapus pool "${name}"? Connection yang memakainya otomatis dialihkan ke direct.`))return;
+  try{await japi(`/api/proxy-pools/${id}`,{method:"DELETE"});loadPools()}catch(e){alert(e.message)}
+}
+async function delProxy(id,idx){
+  const p=poolById(id);if(!p||!p.proxies[idx])return;const u=p.proxies[idx];
+  if(!confirm(`Hapus proxy ${maskProxy(u)} dari pool "${p.name}"?`))return;
+  try{
+    await japi(`/api/proxy-pools/${p.id}`,{method:"PUT",body:JSON.stringify({name:p.name,proxies:p.proxies.filter((_,i)=>i!==idx)})});
+    loadPools();
+  }catch(e){alert(e.message)}
 }
 
 /* ============================================================
@@ -751,8 +994,9 @@ async function loadSettings(){
   $("#s-comp").value=s["compression.default"]||"off";
   $("#s-hc").value=s["health_check.enabled"]||"true";
   $("#s-hci").value=s["health_check.interval_seconds"]||"60";
-  $("#tokstate").textContent=d.dashboard_token_set?"ON":"off";
-  $("#tokstate").className="pill "+(d.dashboard_token_set?"p-ok":"p-dim");
+  const def=d.dashboard_default_password_active;
+  $("#pwstate").textContent=def?"default!":"aktif";
+  $("#pwstate").className="pill "+(def?"p-warn":"p-ok");
 }
 async function saveSettings(){
   const body={"compression.default":$("#s-comp").value,"health_check.enabled":$("#s-hc").value,"health_check.interval_seconds":$("#s-hci").value};
@@ -798,22 +1042,18 @@ $("#impbtn").onclick=async()=>{
   }catch(e){$("#impmsg").innerHTML=ic("alert","err")+" "+esc(e.message)}
 };
 
-async function tokGen(){
-  if(!confirm("Generate admin token baru? (token lama digantikan)"))return;
+async function pwChange(){
+  const msg=$("#pw-msg");
+  msg.textContent="";
   try{
-    const d=await japi("/api/dashboard-token",{method:"POST",body:JSON.stringify({action:"generate"})});
-    localStorage.setItem("lollm_admin_token",d.token);
-    modal(`<h3>Admin Token dibuat — simpan sekarang!</h3>
-    <code class="k mono" id="tok">${esc(d.token)}</code>
-    <p class="muted small">Token juga otomatis dipakai di browser ini. Tempel sebagai header <b>X-LoLLM-Token</b> untuk akses /api dari tempat lain.</p>
-    <div class="row" style="justify-content:flex-end">
-      <button onclick="navigator.clipboard.writeText($('#tok').textContent);this.textContent='Tersalin!'"><svg class="ic"><use href="#i-copy"/></svg>Copy</button>
-      <button class="primary" onclick="closeModal();loadSettings()">Selesai</button></div>`);
-  }catch(e){alert(e.message)}
+    await japi("/api/dashboard-password",{method:"POST",body:JSON.stringify({current:$("#pw-old").value,new:$("#pw-new").value})});
+    alert("Password diganti. Semua sesi dilogout — login ulang dengan password baru.");
+    location.reload();
+  }catch(e){msg.innerHTML=ic("alert","err")+" "+esc(e.message)}
 }
-async function tokClear(){
-  if(!confirm("Hapus admin token? Dashboard kembali terbuka (tanpa token)."))return;
-  try{await japi("/api/dashboard-token",{method:"POST",body:JSON.stringify({action:"clear"})});localStorage.removeItem("lollm_admin_token");loadSettings()}catch(e){alert(e.message)}
+async function doLogout(){
+  try{await fetch("/api/logout",{method:"POST"})}catch(e){}
+  location.reload();
 }
 
 /* ---------- boot ---------- */

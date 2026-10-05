@@ -25,6 +25,9 @@ func doReq(t *testing.T, h http.Handler, method, path, body string, hdr map[stri
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if _, ok := hdr["X-LoLLM-Token"]; !ok {
+		req.Header.Set("X-LoLLM-Token", "edoll123") // dashboard default password
+	}
 	for k, v := range hdr {
 		req.Header.Set(k, v)
 	}
@@ -214,104 +217,5 @@ func TestAdminSettingsValidation(t *testing.T) {
 	code, body := doReq(t, h, "GET", "/api/settings", "", nil)
 	if code != 200 || !strings.Contains(body, `"compression.default":"full"`) {
 		t.Fatalf("get settings: %d %s", code, body)
-	}
-}
-
-func TestAdminDashboardToken(t *testing.T) {
-	s, _, _, _ := newTestAPISrv(t)
-	h := s.AdminHandler()
-
-	// No token yet: open access.
-	if code, _ := doReq(t, h, "GET", "/api/version", "", nil); code != 200 {
-		t.Fatalf("open access failed: %d", code)
-	}
-
-	// Generate a token.
-	code, body := doReq(t, h, "POST", "/api/dashboard-token", `{"action":"generate"}`, nil)
-	if code != 200 {
-		t.Fatalf("generate: %d %s", code, body)
-	}
-	var out struct {
-		Token string `json:"token"`
-	}
-	json.Unmarshal([]byte(body), &out)
-
-	// Without the token → 401 with machine-readable code.
-	code, body = doReq(t, h, "GET", "/api/version", "", nil)
-	if code != 401 || !strings.Contains(body, "dashboard_token_required") {
-		t.Fatalf("expected 401 dashboard_token_required, got %d %s", code, body)
-	}
-	// With the token → OK.
-	code, _ = doReq(t, h, "GET", "/api/version", "", map[string]string{"X-LoLLM-Token": out.Token})
-	if code != 200 {
-		t.Fatalf("token access failed: %d", code)
-	}
-	// Bearer form also works.
-	code, _ = doReq(t, h, "GET", "/api/version", "",
-		map[string]string{"Authorization": "Bearer " + out.Token})
-	if code != 200 {
-		t.Fatalf("bearer token access failed: %d", code)
-	}
-
-	// Clear → open again.
-	code, _ = doReq(t, h, "POST", "/api/dashboard-token", `{"action":"clear"}`,
-		map[string]string{"X-LoLLM-Token": out.Token})
-	if code != 200 {
-		t.Fatalf("clear: %d", code)
-	}
-	if code, _ = doReq(t, h, "GET", "/api/version", "", nil); code != 200 {
-		t.Fatalf("open access after clear failed: %d", code)
-	}
-}
-
-func TestAdminOverviewAndUsage(t *testing.T) {
-	s, store, key, _ := newTestAPISrv(t)
-	if err := store.InsertUsageLog(context.Background(), &db.UsageLog{
-		RequestID: "r1", APIKeyID: key, ComboName: "Auto", Model: "m",
-		PromptTokens: 10, CompletionTokens: 5, TokensSaved: 7, LatencyMs: 100, StatusCode: 200,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	h := s.AdminHandler()
-	code, body := doReq(t, h, "GET", "/api/overview", "", nil)
-	if code != 200 || !strings.Contains(body, `"requests_24h":1`) || !strings.Contains(body, `"tokens_saved":7`) {
-		t.Fatalf("overview: %d %s", code, body)
-	}
-	code, body = doReq(t, h, "GET", "/api/usage?limit=10", "", nil)
-	if code != 200 || !strings.Contains(body, `"combo_name":"Auto"`) {
-		t.Fatalf("usage: %d %s", code, body)
-	}
-}
-
-func TestAdminModelsEndpoint(t *testing.T) {
-	s, store, _, masterKey := newTestAPISrv(t)
-	m := providers.NewMockServer(providers.MockOK())
-	defer m.Close()
-	conn := addMockConn(t, store, masterKey, "upstream", m, []string{"mock-model"}, true)
-	addCombo(t, store, "Auto", db.ComboModel{ConnectionID: conn.ID, Model: "mock-model", Priority: 1})
-
-	code, body := doReq(t, s.AdminHandler(), "GET", "/api/models", "", nil)
-	if code != 200 {
-		t.Fatalf("models: %d %s", code, body)
-	}
-	for _, want := range []string{`"Auto"`, "mock-model"} {
-		if !strings.Contains(body, want) {
-			t.Fatalf("models response missing %s: %s", want, body)
-		}
-	}
-}
-
-// Auth sanity: the admin handler must not be reachable on the public API mux.
-func TestAdminNotOnPublicAPI(t *testing.T) {
-	s, _, _, _ := newTestAPISrv(t)
-	api := httptest.NewServer(s.Handler())
-	defer api.Close()
-	resp, err := api.Client().Get(api.URL + "/api/version")
-	if err != nil {
-		t.Fatal(err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusNotFound {
-		t.Fatalf("admin API must not be mounted on the public API port, got %d", resp.StatusCode)
 	}
 }

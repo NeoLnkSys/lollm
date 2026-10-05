@@ -108,14 +108,28 @@ func TestDashboardAdminAPI(t *testing.T) {
 	ts := httptest.NewServer(h)
 	defer ts.Close()
 
+	// Admin API kini terproteksi password default.
 	resp, err := ts.Client().Get(ts.URL + "/api/version")
 	if err != nil {
 		t.Fatal(err)
 	}
 	body, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	if resp.StatusCode != 401 || !strings.Contains(string(body), "dashboard_password_required") {
+		t.Fatalf("admin api must be password-protected, got %d %s", resp.StatusCode, body)
+	}
+
+	// Dengan password (header) → 200.
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/version", nil)
+	req.Header.Set("X-LoLLM-Token", "edoll123")
+	resp, err = ts.Client().Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(resp.Body)
+	resp.Body.Close()
 	if resp.StatusCode != 200 || !strings.Contains(string(body), "test-version") {
-		t.Fatalf("admin api: %d %s", resp.StatusCode, body)
+		t.Fatalf("admin api with password: %d %s", resp.StatusCode, body)
 	}
 }
 

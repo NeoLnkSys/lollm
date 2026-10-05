@@ -30,6 +30,9 @@ type Server struct {
 	log       *slog.Logger
 	version   string
 	events    *health.Bus // optional; set via UseEventBus before Handler()
+
+	sessions     *sessionStore // dashboard login cookie sessions
+	loginLimiter *loginLimiter // per-IP failed-login throttling
 }
 
 // UseEventBus attaches the status event bus (health checker + dashboard).
@@ -52,14 +55,16 @@ func New(cfg *config.Config, store *db.Store, masterKey []byte, log *slog.Logger
 	}
 
 	return &Server{
-		cfg:       cfg,
-		store:     store,
-		masterKey: masterKey,
-		engine:    routing.NewEngine(),
-		proxyMgr:  proxyMgr,
-		adapters:  adapters,
-		log:       log,
-		version:   version,
+		cfg:          cfg,
+		store:        store,
+		masterKey:    masterKey,
+		engine:       routing.NewEngine(),
+		proxyMgr:     proxyMgr,
+		adapters:     adapters,
+		log:          log,
+		version:      version,
+		sessions:     newSessionStore(),
+		loginLimiter: newLoginLimiter(),
 	}
 }
 

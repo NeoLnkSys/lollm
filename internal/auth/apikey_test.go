@@ -47,16 +47,6 @@ func TestHashAndVerify(t *testing.T) {
 	}
 }
 
-func TestAdminTokenPrefix(t *testing.T) {
-	tok, err := GenerateAdminToken()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.HasPrefix(tok, AdminTokenPrefix) {
-		t.Fatalf("admin token %q missing prefix", tok)
-	}
-}
-
 func TestDisplayPrefixMasks(t *testing.T) {
 	plain, _ := GenerateAPIKey()
 	d := DisplayPrefix(plain)

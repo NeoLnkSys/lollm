@@ -85,20 +85,8 @@ var setupCmd = &cobra.Command{
 			fmt.Printf("• %d active internal API key(s) exist — create more with `lollm key generate`\n", nActive)
 		}
 
-		// 6) Dashboard admin token (used to log in to the dashboard).
-		if _, ok, err := store.GetSetting(ctx, db.SettingDashboardTokenHash); err != nil {
-			return err
-		} else if !ok {
-			plain, err := auth.GenerateAdminToken()
-			if err != nil {
-				return err
-			}
-			if err := store.SetSetting(ctx, db.SettingDashboardTokenHash, auth.HashKey(plain)); err != nil {
-				return err
-			}
-			fmt.Println("✔ dashboard admin token created (shown ONCE — store it now):")
-			fmt.Printf("    %s\n", plain)
-		}
+		// 6) Dashboard password (default seeded automatically on first use).
+		fmt.Println("✔ dashboard password aktif — default: edoll123 (ubah di Settings → Password Dashboard)")
 
 		fmt.Println()
 		fmt.Println("Next steps:")
