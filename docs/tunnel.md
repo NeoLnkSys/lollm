@@ -1,6 +1,6 @@
-# Tunnel & Remote Access — LoLLM Synapse
+# Akses remote (tunnel)
 
-Gateway LoLLM biasanya berjalan di jaringan lokal (`http://0.0.0.0:20999` API, `http://0.0.0.0:21000` dashboard). Kalaubutuh akses dari luar (mis. coding agent di cloud, atau dashboard dari HP), gunakan tunnel.
+Gateway biasanya berjalan di jaringan lokal (`http://0.0.0.0:20999` API, `http://0.0.0.0:21000` dashboard). Kalau butuh akses dari luar — coding agent di cloud, atau dashboard dari HP — berikut caranya.
 
 ## 1. Cloudflare Tunnel (rekomendasi — gratis & stabil)
 
@@ -43,10 +43,10 @@ tailscale up
 
 ## Keamanan saat expose
 
-1. **Selalu pakai API key internal** — semua endpoint `/v1/*` butuh `Authorization: Bearer lollm-…`.
+1. **API key internal wajib** — semua endpoint `/v1/*` menolak request tanpa `Authorization: Bearer lollm-…`.
 2. **Aktifkan dashboard admin token** (Settings → Dashboard Admin Token, atau via API) kalau dashboard ikut di-expose. Tanpa token, siapa pun yang bisa reach port 21000 bisa mengelola gateway.
 3. **Export backup tanpa `--secrets`** kalau file akan berpindah tangan; gunakan `--password` untuk backup yang menyimpan API key provider.
-4. Cloudflare Tunnel + Access (Zero Trust) bisa menambah login SSO di depan tunnel.
+4. Cloudflare Access (Zero Trust) bisa menambah login SSO di depan tunnel bila perlu.
 
 ## Contoh: coding agent via tunnel
 
@@ -56,4 +56,4 @@ export OPENAI_BASE_URL=https://<random>.trycloudflare.com/v1
 export OPENAI_API_KEY=lollm-xxxx   # key internal LoLLM, bukan key provider
 ```
 
-Semua request kini melewati routing, fallback multi-provider, dan Agent Mode LoLLM.
+Semua request kini melewati routing, fallback multi-provider, dan Agent Mode Synapse.

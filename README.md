@@ -1,214 +1,127 @@
 # LoLLM Synapse
 
-**Gateway AI self-hosted / LLM router dalam satu binary.** Versi: **v0.1.0 "Synapse"**.
+**Satu binary. Satu endpoint. Semua LLM Anda.**
 
-LoLLM Synapse duduk di antara coding tools Anda (Cursor, Claude Code, Cline, Codex,
-Continue, Aider, OpenCode, …) dan penyedia LLM (OpenRouter, Gemini, Groq, Mistral,
-Cloudflare AI, Ollama, Poolside, atau endpoint OpenAI-compatible mana pun).
-Arahkan tool ke `http://localhost:20999/v1` — sisanya ditangani Synapse:
+Anda punya key Gemini, dua akun Groq, sisa kuota Mistral, OpenRouter, dan model lokal di Ollama. Tapi Cursor cuma mau satu base URL — dan begitu provider favorit kena rate limit, kerja berhenti.
 
-- **API 100% OpenAI-compatible** — `/v1/chat/completions` (SSE streaming + non-stream), `/v1/models`
-- **Routing health-aware** — combo model multi-provider dengan fallback otomatis, circuit breaker, skip otomatis koneksi rate-limited/unavailable, auto-recovery
-- **Multi-key / multi-account** per provider (round-robin, weighted, sticky)
-- **Agent Mode** (fitur unggulan) — pipeline planner → reviewer → finalizer; debate; parallel — hanya jawaban final yang di-stream
-- **Token compression** — hemat hingga −95% prompt token pada beban kerja coding tool-result
-- **Proxy pools** HTTP/SOCKS5 per koneksi
-- **Dashboard mobile-first** + **Chat Playground** (uji model langsung dari browser/HP)
-- **Backup portabel** `backup.json` (merge/replace, opsional terenkripsi password)
-- **Single binary** — Go + SQLite murni + web UI embedded; zero dependency runtime
+Synapse berdiri di antara coding tool Anda dan semua provider itu. Tool cukup menunjuk `http://localhost:20999/v1` dengan satu API key internal. Routing, fallback saat koneksi gagal, pemulihan otomatis, sampai pemangkasan token — semua urusan Synapse.
 
-> Lihat [CHANGELOG.md](CHANGELOG.md) untuk rilis, [PLAN.md](PLAN.md) untuk roadmap,
-> [docs/tunnel.md](docs/tunnel.md) untuk akses remote (Cloudflare/ngrok/Tailscale).
+## Kenapa Synapse
 
-## Quickstart
+**Tidak gampang mati.** Setiap request melewati rantai fallback: provider pertama kena 429 atau 503? Dalam hitungan milidetik Synapse pindah ke koneksi berikutnya. Koneksi bermasalah otomatis masuk backoff, di-probe berkala, dan kembali bertugas begitu pulih. Anda tidak perlu menyentuh apa pun.
 
-```bash
-make build          # -> ./bin/lollm (binary statis, linux/amd64)
+**Agent Mode.** Beberapa model bekerja sama untuk satu jawaban: planner menyusun draft, reviewer mengkritik, finalizer merapikan. Atau adu beberapa model dan biarkan judge memilih yang terbaik. Cukup ganti nama model ke `agent-auto` — tanpa konfigurasi tambahan. Klien tetap menerima satu jawaban final; proses internal tidak bocor, dan setiap langkah tercatat rapi di usage log.
 
-./bin/lollm serve --host 0.0.0.0 --api-port 20999 --dashboard-port 21000
-# API:       http://localhost:20999/v1
-# Dashboard: http://localhost:21000
-```
+**Hemat token di pekerjaan coding.** Percakapan coding penuh output tool yang panjang dan berulang. Synapse meringkas bagian lama sebelum diteruskan ke provider — pemangkasan ini terlihat langsung di kolom "token dihemat" pada dashboard.
 
-Konfigurasi via `config.yaml` (lihat [configs/config.example.yaml](configs/config.example.yaml)),
-env vars (`HOST`, `API_PORT`, `DASHBOARD_PORT`, `DB_PATH`, `LOG_LEVEL`, `CONFIG`),
-atau flag. Semua objek (koneksi, combo, key, dsb.) disimpan di SQLite dan dikelola
-via dashboard/CLI — bukan di file config.
+**Dashboard di HP.** UI-nya mobile-first: pantau status koneksi secara real-time, uji koneksi ke provider, kelola combo dan API key, lalu coba model mana pun lewat chat playground bawaan — semuanya dari browser ponsel.
+
+**Satu file, nol dependency.** Binary statis sekitar 13 MB. SQLite ter-embed, web UI ter-embed, tidak ada runtime yang harus dipasang. Unduh, jalankan, selesai.
+
+## Install
+
+Cara cepat (Linux/macOS):
 
 ```bash
-# 1) buat API key internal (dipakai client Anda, bukan key provider)
-./bin/lollm key generate --name cursor
-
-# 2) tambahkan koneksi provider (atau lewat dashboard → Connections)
-#    dashboard: http://localhost:21000  (tab Connections → Tambah)
-
-# 3) test
-curl http://localhost:20999/v1/chat/completions \
-  -H "Authorization: Bearer lollm-xxxx" -H "Content-Type: application/json" \
-  -d '{"model":"Auto","messages":[{"role":"user","content":"hello"}]}'
+curl -fsSL https://github.com/NeoLnkSys/lollm/raw/main/scripts/installer.sh | bash
 ```
 
-## Integrasi coding tools
+Installer mendeteksi OS dan arsitektur, memilih direktori instalasi, memverifikasi checksum, dan membetulkan PATH bila perlu. Opsi lain: `--version vX.Y.Z`, `--dest DIR`, `--uninstall`.
 
-Semua tool yang mendukung OpenAI base URL cukup mengganti dua variabel —
-API key yang dipakai adalah **key internal LoLLM** (`lollm key generate`), bukan key provider.
+> Repo masih privat — unduh `installer.sh` dari halaman Releases, atau set `LOLM_TOKEN=<PAT>` bila ingin dipakai via pipe.
 
-### Cursor
-`Settings → Models → OpenAI API Key` isi key internal LoLLM, lalu set override base URL:
-```
-https://localhost:20999/v1
-```
-Atau via config (~/.cursor/mcp.json tidak diperlukan — cukup OpenAI override).
+Manual: unduh tarball dari [Releases](https://github.com/NeoLnkSys/lollm/releases) untuk platform Anda (linux/amd64, darwin/amd64, darwin/arm64, windows/amd64), ekstrak, dan letakkan `lollm` di PATH.
 
-### Claude Code
+Dari source:
+
 ```bash
-export ANTHROPIC_BASE_URL=http://localhost:20999      # mode Anthropic-compat
-# atau pakai jalur OpenAI:
+make build    # butuh Go 1.24+
+```
+
+## 30 detik pertama
+
+```bash
+lollm serve           # API :20999 · dashboard :21000
+lollm key generate    # buat API key internal
+```
+
+Buka `http://localhost:21000`, tambahkan koneksi provider (tab Connections), lalu arahkan tool Anda ke `http://localhost:20999/v1` dengan key tadi. Selesai — combo bawaan `Auto` sudah siap memilih provider tercepat yang hidup.
+
+## Sambungkan coding tool
+
+Semua tool yang paham OpenAI base URL. API key yang dipakai adalah key internal LoLLM, bukan key provider.
+
+**Cursor** — Settings → Models → OpenAI API Key: isi key internal, base URL `http://localhost:20999/v1`.
+
+**Claude Code**
+
+```bash
+export ANTHROPIC_BASE_URL=http://localhost:20999
+# atau jalur OpenAI:
 export OPENAI_BASE_URL=http://localhost:20999/v1
 export OPENAI_API_KEY=lollm-xxxx
 ```
 
-### Cline / Continue / Codex / Aider / OpenCode
-```bash
-export OPENAI_BASE_URL=http://localhost:20999/v1
-export OPENAI_API_KEY=lollm-xxxx
-```
-Di Cline: *Settings → API Provider = OpenAI Compatible* →
-Base URL `http://localhost:20999/v1`, API key internal, model `Auto`.
+**Cline / Continue / Codex / Aider / OpenCode** — pilih provider "OpenAI Compatible", base URL `http://localhost:20999/v1`, key internal, model `Auto`.
 
-**Pilih model**: `Auto` (combo fallback), nama combo lain, `agent-auto` /
-`agent-debate` / `agent-parallel` (pipeline multi-agent), atau model provider
-spesifik (lihat daftar di dashboard → Models atau `GET /v1/models`).
+Model bisa apa pun: nama combo, `agent-auto` / `agent-debate` / `agent-parallel`, atau model provider tertentu — daftarnya di dashboard atau `GET /v1/models`.
 
 ## Agent Mode
 
-```bash
-curl http://localhost:20999/v1/chat/completions \
-  -H "Authorization: Bearer lollm-xxxx" -H "Content-Type: application/json" \
-  -d '{"model":"agent-auto","messages":[{"role":"user","content":"refactor this function"}]}'
-```
-
-| Model | Pipeline |
+| Model | Yang terjadi |
 |---|---|
-| `agent-auto` | collaborative: planner → reviewer (×max_rounds) → finalizer |
-| `agent-debate` | beberapa generator paralel + judge memilih/merge |
-| `agent-parallel` | beberapa generator paralel + merger |
+| `agent-auto` | planner → reviewer (beberapa ronde) → finalizer |
+| `agent-debate` | beberapa generator beradu argumen, judge memilih |
+| `agent-parallel` | beberapa generator paralel, merger menggabungkan |
 
-Aktivasi juga via header `X-LoLLM-Agent-Mode: true` atau flag Agent Mode di combo.
-Setiap call internal tetap melewati routing + fallback penuh dan tercatat per-role
-di usage logs. Bila planner menghasilkan `tool_calls`, frame diteruskan verbatim
-agar coding agent tetap bisa mengeksekusi. `hide_internal_steps` menyembunyikan
-event progres (default on; matikan untuk melihat `agent.step` di stream).
+Bisa juga lewat header `X-LoLLM-Agent-Mode: true` atau flag Agent Mode di combo. Tiap panggilan internal tetap melewati routing dan fallback penuh, tercatat per-role di usage log. Kalau planner memutuskan memanggil tool, `tool_calls` diteruskan apa adanya — coding agent tetap bisa mengeksekusinya.
 
-## Token compression
+## Pemangkasan token
 
 ```
-X-LoLLM-Compression: partial   # ramping: ringkas tool_result lama (aman utk coding)
-X-LoLLM-Compression: full      # ringkas: hemat maksimum
+X-LoLLM-Compression: partial   # ringkas tool output lama
+X-LoLLM-Compression: full      # agresif
 ```
-Bisa juga per-combo (kolom compression) atau global (Settings). Terukur nyata di
-dashboard → Usage (kolom "Token dihemat") dan `lollm usage`.
 
-## Backup / restore
+Bisa per-request (header), per-combo, atau global. Matikan saja bila tidak mau.
+
+## Backup & pindah mesin
 
 ```bash
-./bin/lollm export-config                          # tanpa secret (aman dibagikan)
-./bin/lollm export-config --secrets                # + key provider plaintext (chmod 600)
-./bin/lollm export-config --password 'rahasia'     # key disegel PBKDF2-AES-256-GCM
-./bin/lollm import-config backup.json              # merge (upsert by name)
-./bin/lollm import-config backup.json --replace --yes   # wipe lalu impor
-./bin/lollm import-config sealed.json --password 'rahasia'
+lollm export-config                       # tanpa secret — aman dibagikan
+lollm export-config --password 'rahasia'  # key provider disegel AES-256-GCM
+lollm import-config backup.json            # merge
+lollm import-config backup.json --replace  # ganti total
 ```
-Format: [configs/backup.example.json](configs/backup.example.json). Hash API key
-klien ikut diekspor sehingga key lama tetap berlaku setelah migrasi; key provider
-di-enkripsi ulang dengan master key DB tujuan (aman pindah mesin). Dashboard:
-Settings → Backup.
 
-## Dashboard
-
-`http://localhost:21000` — **mobile-first** (bottom nav, kartu, bottom sheet;
-desktop otomatis dapat layout sidebar):
-
-- 💬 **Chat Playground** — chat langsung dengan model/pipeline apa pun; progres agent live; tool_calls tampil
-- 🔌 **Connections** — CRUD + test koneksi (probe provider nyata), status real-time
-- 🧩 **Combos** — strategy, compression, agent flag, prioritas model
-- 🤖 **Agent Mode** — edit role/model/system prompt/max_rounds
-- 🔑 **API Keys** — generate (tampil sekali), revoke, hapus
-- 📊 **Usage** — request 24 jam, token hemat, latensi, per-role agent
-- 🧭 **Models**, 🕸 **Proxy Pools**, ⚙️ **Settings** (+ backup & admin token opsional)
-
-Akses remote: aktifkan **Dashboard Admin Token** (Settings) bila dashboard di-expose —
-lihat [docs/tunnel.md](docs/tunnel.md).
-
-## CLI
-
-```
-lollm serve          # jalankan gateway (API + dashboard)
-lollm setup          # wizard interaktif
-lollm doctor         # diagnosa koneksi & konfigurasi
-lollm key generate|list|revoke
-lollm routes         # lihat combo & routing
-lollm export-config  # backup.json
-lollm import-config  # restore
-lollm usage [--csv]  # log usage terakhir
-lollm version
-```
+Hash API key klien ikut serta, jadi key lama tetap berlaku setelah pindah mesin. Bisa juga lewat dashboard → Settings → Backup.
 
 ## Docker
 
 ```bash
-make docker          # build image multi-stage -> lollm-synapse:latest
-docker run -p 20999:20999 -p 21000:21000 -v lollm-data:/data lollm-synapse:latest
+make docker
+docker run -p 20999:20999 -p 21000:21000 -v lollm-data:/data lollm-synapse:0.1.0
 ```
 
-## Build & release
-
-```bash
-make build           # bin/lollm (linux/amd64, statis)
-make test            # seluruh unit + integration test
-make release         # tarball linux/amd64 + darwin/arm64 + darwin/amd64 + windows/amd64
-```
-
-Tanpa dependency runtime; butuh Go 1.24+ untuk build dari source.
-
-## Arsitektur
+## Di dalam binary
 
 ```
-cmd/lollm            CLI (cobra)
-internal/api         OpenAI-compat API + admin JSON API (dashboard port)
-internal/dashboard   Web UI embedded (go:embed) + proxy /v1 & /api
-internal/routing     health-aware engine, fallback, sticky/weighted
-internal/health      watcher, circuit breaker, event bus
-internal/providers   adapter OpenAI-compatible per provider + probe strategy
-internal/compression token compression partial/full
-internal/agent       Agent Mode orchestration (collaborative/debate/parallel)
-internal/backup      backup.json Build/Restore (+PBKDF2 seal)
-internal/db          SQLite (modernc, murni Go) + migrations + store
-internal/secret      AES-256-GCM master-key encryption
-internal/auth        API key internal (SHA-256 hash)
+cmd/lollm            CLI
+internal/api         endpoint OpenAI-compat + admin API (port dashboard saja)
+internal/dashboard   web UI ter-embed + chat playground
+internal/routing     mesin health-aware, fallback, weighted/sticky
+internal/health      watcher, circuit breaker, auto-recovery
+internal/providers   adapter per provider + strategi probe
+internal/compression pemangkasan token
+internal/agent       orkestrasi Agent Mode
+internal/backup      format backup.json
+internal/db          SQLite murni (tanpa CGO) + migrasi
+internal/secret      enkripsi master-key AES-256-GCM
+internal/auth        API key internal (hash SHA-256)
 ```
 
-## Keamanan
-
-- API key provider: di-encrypt AES-256-GCM (master key per instalasi), **tidak pernah** dikirim ke frontend atau masuk log.
-- API key internal: hanya hash SHA-256 yang disimpan.
-- Port API (20999) hanya expose endpoint OpenAI-compat; admin API hanya di port dashboard, plus admin token opsional.
-- Batas ukuran body request; request-id di setiap respons; graceful shutdown.
-
-## Status kriteria sukses (spec §11)
-
-| Kriteria | Status |
-|---|---|
-| Satu binary tanpa dependency eksternal | ✅ statis ~13 MB (CGO off) |
-| `serve` jalan di 0.0.0.0:20999 + 21000 | ✅ |
-| Request OpenAI-compat dari coding tools ter-route | ✅ live (57 koneksi nyata) |
-| Koneksi rate-limited/unavailable otomatis di-skip | ✅ terverifikasi live |
-| Combo "Auto" hanya model hidup | ✅ health-aware |
-| Agent Mode: hanya final yang di-stream | ✅ live-proven |
-| Dashboard manage connections/combos/agent | ✅ |
-| Export/import backup.json | ✅ roundtrip live-proven |
-| Semua secret aman | ✅ encrypted/hashed, never exposed |
+Konfigurasi: `config.yaml` → env (`HOST`, `API_PORT`, `DASHBOARD_PORT`, `DB_PATH`, `LOG_LEVEL`) → flag CLI. Contoh lengkap di [configs/config.example.yaml](configs/config.example.yaml).
 
 ---
 
-LoLLM Synapse v0.1.0 — dibangun sesuai spesifikasi `uploads/agent.md`.
+Ditulis dalam Go murni (CGO off), diuji 150+ test unit dan integrasi. Butuh akses dari luar jaringan? Lihat [docs/tunnel.md](docs/tunnel.md).
