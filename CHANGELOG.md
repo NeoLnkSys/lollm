@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.4 "Synapse" — 2026-10-05
+
+Perbaikan dashboard (UX) + bugfix streaming.
+
+- **Fix: streaming chat tidak menampilkan balasan** — parser SSE dashboard dulu hanya memproses frame ber-`event: chat.completion.chunk`, padahal gateway mengirim `data:` tanpa nama event; kini semua frame ber-`data:` diproses (plus dukungan CRLF & field `reasoning` ditampilkan).
+- **Fix: input chat tertutup bottom bar (mobile)** — tinggi bar diukur nyata via JS dan dipakai sebagai padding halaman chat; tinggi item bar dibuat deterministik.
+- **Proxy Pools bisa dikelola penuh dari dashboard** — pool per-card; setiap proxy punya kartu sendiri dengan tombol test (latency live), hapus, dan indikator in use (jumlah connection memakai pool tsb) + hasil test terakhir.
+- **Combo editor model picker** — pilih model via checkbox chips yang dimuat langsung dari API sumber (`v1/models` per connection), priority terisi otomatis sesuai urutan centang dan tetap bisa diubah; mode manual lama tetap tersedia.
+
 ## v0.1.3 "Synapse" — 2026-10-05
 
 - **Kompatibilitas klien diperluas** — field spesifik vendor di level atas request (mis. `search_parameters` dari Grok CLI/xAI) kini juga dibersihkan via allowlist sebelum diteruskan, memperbaiki error 400 `Cannot find field` dari upstream Google/FastAPI. Terverifikasi end-to-end dengan Grok CLI (chat + tool calls multi-ronde).

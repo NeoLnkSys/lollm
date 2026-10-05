@@ -5,6 +5,7 @@ package proxy
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -88,6 +89,30 @@ func rotatingTransport(urls []string) *http.Transport {
 	return withBaseTransport(func(*http.Request) (*url.URL, error) {
 		return parsed[int(counter.Add(1)-1)%len(parsed)], nil
 	})
+}
+
+// Invalidate drops the cached client for a pool. Call after the pool's proxy
+// list changes so new traffic is routed through the updated proxies.
+func (m *Manager) Invalidate(poolID string) {
+	if poolID == "" {
+		return
+	}
+	m.mu.Lock()
+	delete(m.clients, poolID)
+	m.mu.Unlock()
+}
+
+// NewProxiedClient builds an HTTP client that routes all traffic through a
+// single proxy URL (http/https/socks5). Used by the dashboard's per-proxy
+// live test. The returned error is non-nil for malformed proxy URLs.
+func NewProxiedClient(proxyURL string) (*http.Client, error) {
+	p, err := url.Parse(proxyURL)
+	if err != nil || p.Scheme == "" || p.Host == "" {
+		return nil, fmt.Errorf("invalid proxy URL %q", proxyURL)
+	}
+	return &http.Client{
+		Transport: withBaseTransport(func(*http.Request) (*url.URL, error) { return p, nil }),
+	}, nil
 }
 
 func (m *Manager) directClient() *http.Client {

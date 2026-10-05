@@ -151,3 +151,29 @@ func TestManagerCachesClientsPerPool(t *testing.T) {
 		t.Fatal("different pools must get different clients")
 	}
 }
+
+func TestInvalidateDropsCachedClient(t *testing.T) {
+	mgr := NewManager(func(ctx context.Context, poolID string) ([]string, error) {
+		return []string{"http://127.0.0.1:1"}, nil
+	})
+	c1 := mgr.Client("pool_a")
+	if c1 == nil {
+		t.Fatal("nil client")
+	}
+	mgr.Invalidate("pool_a")
+	if mgr.Client("pool_a") == c1 {
+		t.Fatal("cached client must be dropped after Invalidate")
+	}
+	// Invalidate of an unknown/empty pool is a no-op.
+	mgr.Invalidate("")
+	mgr.Invalidate("never-seen")
+}
+
+func TestNewProxiedClientValidation(t *testing.T) {
+	if _, err := NewProxiedClient("not a url"); err == nil {
+		t.Fatal("malformed URL must be rejected")
+	}
+	if _, err := NewProxiedClient("socks5://h:1080"); err != nil {
+		t.Fatalf("valid socks5 URL rejected: %v", err)
+	}
+}
